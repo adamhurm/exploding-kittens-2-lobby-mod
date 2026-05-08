@@ -17,6 +17,9 @@ public static class AutoLaunchHelper
     public static void Enable()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RegKey, writable: true)!;
+        // NOTE: This only works correctly when EKLobbyTray is deployed as a self-contained
+        // standalone .exe (via dotnet publish --self-contained). Running via 'dotnet run'
+        // will register the dotnet runtime path instead of the app path.
         key.SetValue(ValueName, System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName);
     }
 

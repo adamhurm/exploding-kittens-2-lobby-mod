@@ -13,6 +13,7 @@ public class TrayApp : IDisposable
     private readonly NotifyIcon _icon;
     private readonly FileSystemWatcher _watcher;
     private LobbyConfig _config;
+    private DateTime _lastConfigReload = DateTime.MinValue;
 
     public TrayApp()
     {
@@ -40,6 +41,11 @@ public class TrayApp : IDisposable
 
     private void OnConfigChanged(object sender, FileSystemEventArgs e)
     {
+        // FSW fires twice on Windows for a single save; ignore events within 500ms of the last reload
+        var now = DateTime.UtcNow;
+        if ((now - _lastConfigReload).TotalMilliseconds < 500) return;
+        _lastConfigReload = now;
+
         _config = ConfigStore.Load();
         _icon.ContextMenuStrip = BuildMenu();
     }
