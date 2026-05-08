@@ -234,6 +234,35 @@
   .invite-btn { background: var(--ek-red); }
   .rejoin-btn { background: var(--ek-dark); }
   .rejoin-btn.active { background: var(--ek-green); }
+
+  /* ── State 4: Countdown overlay (placeholder for Group A) ── */
+  .countdown-overlay {
+    position: absolute;
+    inset: 44px 0 0 0; /* below the header strip */
+    background: rgba(0, 0, 0, 0.82);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 10;
+  }
+  .countdown-number {
+    font-size: 64px;
+    font-weight: bold;
+    color: var(--ek-red);
+    line-height: 1;
+  }
+  .countdown-label {
+    font-size: 13px;
+    color: var(--ek-off-white);
+    letter-spacing: 1px;
+  }
+  .countdown-hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -339,7 +368,52 @@
     <span class="state-label">3 — Post-game</span>
   </div>
 
-  <!-- state 4 added in subsequent task -->
+  <!-- ── State 4: Countdown (placeholder — Group A feature) ── -->
+  <div class="state-wrapper">
+    <div class="expanded-panel">
+      <div class="header-strip">
+        <span class="header-title">MY LOBBY</span>
+        <div class="minimize-btn"><div class="minimize-bar"></div></div>
+      </div>
+      <div class="code-row">
+        <span class="code-label">Code: EK-A3F9C12B</span>
+        <button class="copy-btn">Copy</button>
+        <button class="icon-btn">✏</button>
+      </div>
+      <div class="friend-list">
+        <div class="friend-row">
+          <span class="friend-name">● Alice</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row">
+          <span class="friend-name">● Bob</span>
+          <button class="kick-btn">kick</button>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Carol</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Dave</span>
+          <button class="remove-btn">✕</button>
+        </div>
+      </div>
+      <button class="add-btn">+ Add</button>
+      <div class="rejoin-prompt hidden">placeholder</div>
+      <div class="action-row">
+        <button class="invite-btn">INVITE ALL</button>
+        <button class="rejoin-btn">REJOIN</button>
+      </div>
+      <!-- TODO: Group A — auto-queue countdown overlay -->
+      <div class="countdown-overlay">
+        <div class="countdown-number">3</div>
+        <div class="countdown-label">REJOINING LOBBY…</div>
+        <div class="countdown-hint">Click Leave in-game to cancel</div>
+      </div>
+    </div>
+    <span class="state-label">4 — Countdown</span>
+  </div>
 </div>
 
 </body>
