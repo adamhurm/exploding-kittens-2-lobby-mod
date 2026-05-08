@@ -151,6 +151,56 @@
     padding: 0 6px;
   }
   .icon-btn { width: 28px; }
+
+  /* Friend list */
+  .friend-list {
+    flex: 1;
+    overflow: hidden;
+    margin: 0 6px;
+  }
+  .friend-row {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--ek-off-white);
+  }
+  .friend-row:nth-child(odd)  { background: var(--ek-row-a); }
+  .friend-row:nth-child(even) { background: var(--ek-row-b); }
+  .friend-row.offline { color: #8a8a8a; }
+  .friend-name { flex: 1; }
+  .kick-btn {
+    font-size: 9px;
+    background: var(--ek-red);
+    color: var(--ek-off-white);
+    border: none;
+    padding: 0 4px;
+    height: 20px;
+    cursor: pointer;
+    margin-right: 4px;
+  }
+  .remove-btn {
+    font-size: 10px;
+    background: var(--ek-red-dark);
+    color: var(--ek-off-white);
+    border: none;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+  }
+  .add-btn {
+    font-size: 12px;
+    color: var(--ek-off-white);
+    background: var(--ek-dark);
+    border: none;
+    padding: 0 8px;
+    height: 22px;
+    margin: 4px 6px 2px;
+    cursor: pointer;
+    align-self: flex-start;
+    flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -186,7 +236,27 @@
         <button class="copy-btn">Copy</button>
         <button class="icon-btn">✏</button>
       </div>
-      <!-- friend list, add btn, rejoin prompt, action row added in Tasks 4–5 -->
+      <div class="friend-list">
+        <div class="friend-row">
+          <span class="friend-name">● Alice</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row">
+          <span class="friend-name">● Bob</span>
+          <button class="kick-btn">kick</button>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Carol</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Dave</span>
+          <button class="remove-btn">✕</button>
+        </div>
+      </div>
+      <button class="add-btn">+ Add</button>
+      <!-- rejoin prompt and action row added in Task 5 -->
     </div>
     <span class="state-label">2 — Expanded</span>
   </div>
