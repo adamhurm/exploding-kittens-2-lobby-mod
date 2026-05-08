@@ -49,4 +49,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy hosting/ek.bring-us.com/public --project-name=ek-bring-us-com --branch master
+          command: pages deploy hosting/ek.bring-us.com/public --project-name=ek-bring-us-com --branch main
