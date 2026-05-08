@@ -5,6 +5,7 @@ using Xunit;
 
 namespace EKLobbyShared.Tests;
 
+[Collection("ConfigStoreTests")]
 public class ConfigStoreTests : IDisposable
 {
     private readonly string _tempPath;
