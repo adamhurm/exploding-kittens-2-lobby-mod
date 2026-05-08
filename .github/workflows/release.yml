@@ -23,7 +23,7 @@ jobs:
         run: |
           $url = "https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
           Invoke-WebRequest $url -OutFile bepinex.zip -UseBasicParsing
-          Expand-Archive bepinex.zip -DestinationPath libs\BepInEx -Force
+          Expand-Archive bepinex.zip -DestinationPath libs -Force
           Remove-Item bepinex.zip
 
       - name: Build and package
