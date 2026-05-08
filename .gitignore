@@ -1,3 +1,4 @@
 tools/dump/
 **/bin/
 **/obj/
+.superpowers/
