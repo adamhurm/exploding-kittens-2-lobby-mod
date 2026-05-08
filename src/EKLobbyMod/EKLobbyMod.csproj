@@ -3,7 +3,6 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>EKLobbyMod</AssemblyName>
     <RootNamespace>EKLobbyMod</RootNamespace>
-    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <!-- BepInEx core DLLs from game install -->
