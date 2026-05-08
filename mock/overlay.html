@@ -84,6 +84,73 @@
     color: var(--ek-off-white);
     letter-spacing: 1px;
   }
+
+  /* ── States 2–4: Expanded panel (300×400) ── */
+  .expanded-panel {
+    width: 300px;
+    height: 400px;
+    background: var(--ek-black);
+    border: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Header strip */
+  .header-strip {
+    height: 44px;
+    background: var(--ek-red);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: 17px;
+    font-weight: bold;
+    color: var(--ek-off-white);
+    letter-spacing: 1px;
+  }
+  .minimize-btn {
+    width: 32px;
+    height: 30px;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .minimize-bar {
+    width: 65%;
+    height: 3px;
+    background: var(--ek-off-white);
+  }
+
+  /* Code row */
+  .code-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 6px 4px;
+    flex-shrink: 0;
+  }
+  .code-label {
+    font-size: 13px;
+    color: var(--ek-off-white);
+    white-space: nowrap;
+    flex: 1;
+  }
+  .copy-btn, .icon-btn {
+    font-size: 11px;
+    color: var(--ek-off-white);
+    background: var(--ek-dark);
+    border: none;
+    cursor: pointer;
+    height: 22px;
+    padding: 0 6px;
+  }
+  .icon-btn { width: 28px; }
 </style>
 </head>
 <body>
@@ -107,7 +174,24 @@
     <span class="state-label">1 — Minimized</span>
   </div>
 
-  <!-- states 2–4 added in subsequent tasks -->
+  <!-- ── State 2: Expanded ── -->
+  <div class="state-wrapper">
+    <div class="expanded-panel">
+      <div class="header-strip">
+        <span class="header-title">MY LOBBY</span>
+        <div class="minimize-btn"><div class="minimize-bar"></div></div>
+      </div>
+      <div class="code-row">
+        <span class="code-label">Code: EK-A3F9C12B</span>
+        <button class="copy-btn">Copy</button>
+        <button class="icon-btn">✏</button>
+      </div>
+      <!-- friend list, add btn, rejoin prompt, action row added in Tasks 4–5 -->
+    </div>
+    <span class="state-label">2 — Expanded</span>
+  </div>
+
+  <!-- states 3–4 added in subsequent tasks -->
 </div>
 
 </body>
