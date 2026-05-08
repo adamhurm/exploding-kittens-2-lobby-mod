@@ -201,6 +201,39 @@
     align-self: flex-start;
     flex-shrink: 0;
   }
+
+  /* Rejoin prompt */
+  .rejoin-prompt {
+    font-size: 11px;
+    color: var(--ek-yellow);
+    height: 22px;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+  .rejoin-prompt.hidden { visibility: hidden; }
+
+  /* Action buttons row */
+  .action-row {
+    display: flex;
+    gap: 8px;
+    padding: 6px;
+    flex-shrink: 0;
+  }
+  .invite-btn, .rejoin-btn {
+    flex: 1;
+    height: 38px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--ek-off-white);
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .invite-btn { background: var(--ek-red); }
+  .rejoin-btn { background: var(--ek-dark); }
+  .rejoin-btn.active { background: var(--ek-green); }
 </style>
 </head>
 <body>
@@ -256,7 +289,11 @@
         </div>
       </div>
       <button class="add-btn">+ Add</button>
-      <!-- rejoin prompt and action row added in Task 5 -->
+      <div class="rejoin-prompt hidden">Game over — return to your lobby?</div>
+      <div class="action-row">
+        <button class="invite-btn">INVITE ALL</button>
+        <button class="rejoin-btn">REJOIN</button>
+      </div>
     </div>
     <span class="state-label">2 — Expanded</span>
   </div>
