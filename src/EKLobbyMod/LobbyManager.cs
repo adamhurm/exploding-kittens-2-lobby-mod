@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using EKLobbyShared;
 using HarmonyLib;
 using MGS.Network;
@@ -16,14 +17,52 @@ public class LobbyManager
     // Set to true while we are attempting JoinOrCreate for our home room, so that
     // OnJoinRoomFailed knows to escalate to CreateRoom rather than ignoring the failure.
     private bool _joinOrCreatePending = false;
+    private string _lastLoggedRoom = "";
+    private ulong _localSteamId;
+
+    // Steam64 IDs of players currently connected to this Photon room.
+    // Assumes PhotonNetwork.UserId == Steam64 ID string (standard for Steam+Photon games).
+    private readonly HashSet<string> _roomSteamIds = new HashSet<string>();
 
     public event System.Action RejoinAvailable;
     public event System.Action RejoinConfirmed;
+    public event System.Action PlayerListChanged;
+    public event System.Action AutoQueueCancelled;
+
+    public const string VersionPropertyKey = "ekmod_ver";
+
+    // UserId → mod version string. Absent entry = no mod / pre-broadcast client.
+    private readonly System.Collections.Generic.Dictionary<string, string> _peerVersions
+        = new System.Collections.Generic.Dictionary<string, string>();
+
+    public System.Collections.Generic.IReadOnlyDictionary<string, string> PeerVersions
+        => _peerVersions;
+
+    // True when at least one peer's version differs from Plugin.PluginVersion.
+    // Peers with no ekmod_ver property are ignored (treated as non-mod clients).
+    public bool HasVersionDrift =>
+        System.Linq.Enumerable.Any(
+            _peerVersions.Values,
+            v => v != Plugin.PluginVersion);
+
+    public event System.Action VersionMapChanged;
+
+    // True while the 5-second countdown is running in the overlay.
+    // Reset to false on OnJoinedRoom or when the player explicitly leaves mid-countdown.
+    public bool AutoQueueActive { get; private set; }
+
+    // Set to false to skip the auto-queue countdown entirely (reserved for future settings UI).
+    public bool AutoQueueEnabled { get; set; } = true;
+
+    public IReadOnlyCollection<string> RoomSteamIds => _roomSteamIds;
+    public bool IsMasterClient => _controller.IsMasterClient();
 
     private LobbyManager(IMultiplayerController controller)
     {
         _controller = controller;
         Config = ConfigStore.Load();
+        _controller.add_OnPlayerEnteredRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerEntered));
+        _controller.add_OnPlayerLeftRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerLeft));
         Plugin.Log.LogInfo($"LobbyManager ready — home lobby: {Config.LobbyRoomName}");
     }
 
@@ -32,8 +71,18 @@ public class LobbyManager
         Instance = new LobbyManager(controller);
         var steamId = SteamInviter.GetLocalSteamId();
         if (steamId != 0)
+        {
+            Instance._localSteamId = steamId;
             Instance.Config.LobbyRoomName = ConfigStore.GetOrCreateRoomName(steamId);
+        }
         Plugin.Log.LogInfo($"LobbyManager initialized — room: {Instance.Config.LobbyRoomName}");
+
+        // Apply cold-launch +connect arg if one was captured during Plugin.Load()
+        if (Plugin.Instance?._pendingConnectArg is string pending)
+        {
+            Instance.JoinSpecificRoom(pending);
+            Plugin.Instance._pendingConnectArg = null;
+        }
     }
 
     public void JoinOrCreateHomeLobby()
@@ -60,6 +109,40 @@ public class LobbyManager
         ConfigStore.Save(Config);
     }
 
+    public void UpdateRoomName(string newName)
+    {
+        Config.LobbyRoomName = newName;
+        ConfigStore.Save(Config);
+        Plugin.Log.LogInfo($"Room name updated to: {newName}");
+    }
+
+    /// <summary>
+    /// A valid room name is 1–64 printable ASCII characters with no control characters,
+    /// null bytes, or path-separator characters. This matches the Photon room name limits.
+    /// </summary>
+    public static bool IsValidRoomName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (name.Length > 64) return false;
+        foreach (char c in name)
+        {
+            if (c < 0x20 || c > 0x7E) return false;  // non-printable or non-ASCII
+            if (c == '/' || c == '\\' || c == '.') return false;  // path chars
+        }
+        return true;
+    }
+
+    public void JoinSpecificRoom(string roomName)
+    {
+        if (!IsValidRoomName(roomName))
+        {
+            Plugin.Log.LogWarning($"JoinSpecificRoom: rejected invalid room name (length={roomName?.Length})");
+            return;
+        }
+        UpdateRoomName(roomName);
+        JoinOrCreateHomeLobby();
+    }
+
     // ── Photon event handlers (called from Harmony patches below) ─────────────
 
     internal void HandleCreatedRoom()
@@ -71,6 +154,8 @@ public class LobbyManager
             ConfigStore.Save(Config);
         }
         _joinOrCreatePending = false;
+        _controller.AllowKickPlayers(true);
+        RefreshRoomPlayers();
         Plugin.Log.LogInfo($"Room created: {name}");
     }
 
@@ -78,15 +163,125 @@ public class LobbyManager
     {
         _joinOrCreatePending = false;
         PendingRejoin = false;
+        AutoQueueActive = false;
         RejoinConfirmed?.Invoke();
-        Plugin.Log.LogInfo($"Joined room: {_controller.GetRoomName()}");
+        RefreshRoomPlayers();
+        PhotonPropertyHelper.SetLocalVersion(Plugin.PluginVersion);
+        RebuildVersionMap();
+        var roomName = _controller.GetRoomName();
+        if (!string.IsNullOrEmpty(roomName) && roomName != _lastLoggedRoom)
+        {
+            Plugin.Log.LogInfo($"Joined room: {roomName}");
+            _lastLoggedRoom = roomName;
+        }
     }
 
     internal void HandleLeftRoom()
     {
+        if (AutoQueueActive)
+        {
+            // A second OnLeftRoom while the countdown is running means the player clicked
+            // the game's native Leave button — treat this as an explicit opt-out.
+            AutoQueueActive = false;
+            PendingRejoin = false;
+            _roomSteamIds.Clear();
+            _peerVersions.Clear();
+            VersionMapChanged?.Invoke();
+            PlayerListChanged?.Invoke();
+            AutoQueueCancelled?.Invoke();
+            Plugin.Log.LogInfo("Left room during countdown — auto-queue cancelled");
+            return;
+        }
+
         PendingRejoin = true;
+        if (AutoQueueEnabled)
+            AutoQueueActive = true;
+        _roomSteamIds.Clear();
+        _peerVersions.Clear();
+        VersionMapChanged?.Invoke();
+        PlayerListChanged?.Invoke();
         RejoinAvailable?.Invoke();
         Plugin.Log.LogInfo("Left room — rejoin prompt raised");
+    }
+
+    private void HandlePlayerEntered(NetworkPlayer player)
+    {
+        if (player == null) return;
+        var uid = player.UserId;
+        if (!string.IsNullOrEmpty(uid))
+        {
+            _roomSteamIds.Add(uid);
+            PlayerListChanged?.Invoke();
+            // New player may already have their version property set
+            var ver = PhotonPropertyHelper.ReadPeerVersion(player);
+            if (ver != null)
+            {
+                _peerVersions[uid] = ver;
+                VersionMapChanged?.Invoke();
+            }
+        }
+    }
+
+    private void HandlePlayerLeft(NetworkPlayer player)
+    {
+        if (player == null) return;
+        var uid = player.UserId ?? "";
+        _roomSteamIds.Remove(uid);
+        PlayerListChanged?.Invoke();
+        if (_peerVersions.Remove(uid))
+            VersionMapChanged?.Invoke();
+    }
+
+    private void RefreshRoomPlayers()
+    {
+        _roomSteamIds.Clear();
+        var players = _controller.GetRoomPlayers();
+        if (players != null)
+            foreach (var p in players)
+                if (p != null && !string.IsNullOrEmpty(p.UserId))
+                    _roomSteamIds.Add(p.UserId);
+        PlayerListChanged?.Invoke();
+    }
+
+    private void RebuildVersionMap()
+    {
+        _peerVersions.Clear();
+        var players = _controller.GetRoomPlayers();
+        if (players == null)
+        {
+            VersionMapChanged?.Invoke();
+            return;
+        }
+        foreach (var p in players)
+        {
+            if (p == null || string.IsNullOrEmpty(p.UserId)) continue;
+            var ver = PhotonPropertyHelper.ReadPeerVersion(p);
+            if (ver != null)
+                _peerVersions[p.UserId] = ver;
+        }
+        VersionMapChanged?.Invoke();
+        Plugin.Log.LogInfo(
+            $"[LobbyManager] Version map rebuilt: {_peerVersions.Count} modded peer(s), drift={HasVersionDrift}");
+    }
+
+    internal void HandlePlayerPropertiesUpdate(NetworkPlayer player)
+    {
+        if (player == null || string.IsNullOrEmpty(player.UserId)) return;
+        var ver = PhotonPropertyHelper.ReadPeerVersion(player);
+        if (ver != null)
+        {
+            _peerVersions[player.UserId] = ver;
+            VersionMapChanged?.Invoke();
+            Plugin.Log.LogInfo(
+                $"[LobbyManager] Player {player.UserId} updated ekmod_ver to {ver}");
+        }
+    }
+
+    public void KickPlayer(string steam64Id)
+    {
+        _controller.AllowKickPlayers(true);
+        _controller.KickPlayer(steam64Id);
+        Plugin.Log.LogDebug($"Kicked player (Steam64 ID redacted from LogInfo)");
     }
 
     internal void HandleJoinRoomFailed(short returnCode, string message)
@@ -125,5 +320,38 @@ public class LobbyManager
     {
         static void Postfix(short returnCode, string message) =>
             Instance?.HandleJoinRoomFailed(returnCode, message);
+    }
+
+    [HarmonyPatch(typeof(PhotonMatchMakingHandler), "OnPlayerPropertiesUpdate")]
+    class Patch_OnPlayerPropertiesUpdate
+    {
+        // Photon signature: OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
+        // In IL2CPP interop the first parameter is the interop-wrapped Player type.
+        // We find the matching NetworkPlayer by UserId via GetRoomPlayers().
+        static void Postfix(Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase targetPlayer)
+        {
+            if (Instance == null) return;
+            try
+            {
+                // Cast to Photon.Realtime.Player to get UserId
+                var photonPlayer = targetPlayer.TryCast<Photon.Realtime.Player>();
+                if (photonPlayer == null) return;
+                var players = Instance._controller.GetRoomPlayers();
+                if (players == null) return;
+                foreach (var p in players)
+                {
+                    if (p != null && p.UserId == photonPlayer.UserId)
+                    {
+                        Instance.HandlePlayerPropertiesUpdate(p);
+                        return;
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogWarning(
+                    $"[Patch_OnPlayerPropertiesUpdate] {ex.Message}");
+            }
+        }
     }
 }

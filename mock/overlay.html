@@ -8,20 +8,34 @@
   /* ── Reset ── */
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── EK brand palette (source: src/EKLobbyMod/OverlayPanel.cs) ── */
+  /* ── EK brand palette (source: src/EKLobbyMod/OverlayPanel.cs) ──────────
+     Unity Color(r,g,b,a) → 8-bit hex or rgba() for alpha
+     EkBlack    Color(0.059, 0.059, 0.059, 0.97) = rgba(15,15,15,0.97)
+     EkRed      Color(0.506, 0.141, 0.176, 1)    = #81242D
+     EkOffWhite Color(0.988, 0.972, 0.933, 1)    = #FCF8EE
+     EkDark     Color(0.14,  0.14,  0.14,  1)    = #242424
+     EkRedDark  Color(0.32,  0.08,  0.10,  1)    = #52141A
+     EkGreen    Color(0.12,  0.48,  0.12,  1)    = #1F7A1F  (party dot green, rejoin active)
+     EkGray     Color(0.45,  0.45,  0.45,  1)    = #737373  (party dot gray/solo)
+     Rejoin prompt Color(1,   0.85, 0.30,  1)    = #FFD94D
+     Row even   Color(0.16, 0.16, 0.16, 1)       = #292929
+     Row odd    Color(0.11, 0.11, 0.11, 1)       = #1C1C1C
+  ─────────────────────────────────────────────────────────────────────── */
   :root {
-    --ek-black:     rgba(15,  15,  15,  0.97); /* EkBlack    0.059,0.059,0.059 */
-    --ek-red:       #81242D;                   /* EkRed      0.506,0.141,0.176 */
-    --ek-off-white: #FCF8EE;                   /* EkOffWhite 0.988,0.972,0.933 */
-    --ek-dark:      #242424;                   /* EkDark     0.14,0.14,0.14    */
-    --ek-red-dark:  #52141A;                   /* EkRedDark  0.32,0.08,0.10    */
-    --ek-green:     #1E7A1E;                   /* Rejoin-active 0.12,0.48,0.12 */
-    --ek-yellow:    #FFD94D;                   /* Rejoin prompt 1,0.85,0.3     */
-    --ek-row-a:     #292929;                   /* Friend row even  0.16,0.16   */
-    --ek-row-b:     #1C1C1C;                   /* Friend row odd   0.11,0.11   */
+    --ek-black:     rgba(15,  15,  15,  0.97);
+    --ek-red:       #81242D;
+    --ek-off-white: #FCF8EE;
+    --ek-dark:      #242424;
+    --ek-red-dark:  #52141A;
+    --ek-green:     #1F7A1F;   /* EkGreen Color(0.12,0.48,0.12) */
+    --ek-gray:      #737373;   /* EkGray  Color(0.45,0.45,0.45) */
+    --ek-yellow:    #FFD94D;
+    --ek-amber:     #D97706;   /* version-drift warning band */
+    --ek-row-a:     #292929;
+    --ek-row-b:     #1C1C1C;
   }
 
-  /* ── Page ── */
+  /* ── Page chrome ── */
   body {
     background: #111;
     font-family: 'Segoe UI', system-ui, sans-serif;
@@ -70,6 +84,7 @@
     align-items: center;
     border: 1px solid #222;
     cursor: pointer;
+    position: relative;
   }
   .min-tab .accent {
     width: 4px;
@@ -77,15 +92,50 @@
     background: var(--ek-red);
     flex-shrink: 0;
   }
+  /* Party dot — solid square 10×10 at position (8,15) from panel origin */
+  .min-tab .party-dot {
+    width: 10px;
+    height: 10px;
+    margin-left: 4px;       /* ~8px from panel left after 4px accent */
+    background: #737373;    /* EkGray Color(0.45,0.45,0.45) ≈ #737373 */
+    flex-shrink: 0;
+  }
+  .min-tab .party-dot.online { background: #1F7A1F; } /* EkGreen */
+  /* "X in party" label — 90px wide, font-size 11px */
+  .min-tab .party-text {
+    width: 90px;
+    font-size: 11px;
+    color: var(--ek-off-white);
+    padding-left: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  /* Lobby code — right side, 88px wide, font-size 11px, right-aligned */
   .min-tab .code-text {
     flex: 1;
-    text-align: center;
-    font-size: 13px;
+    text-align: right;
+    font-size: 11px;
     color: var(--ek-off-white);
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
+    padding-right: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  /* Version-drift amber dot on min-tab (8px circle, right side) */
+  .min-tab .code-text.drift {
+    color: #FF8C00;
+  }
+  .min-tab .drift-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #FF8C00;
+    flex-shrink: 0;
+    margin-right: 4px;
   }
 
-  /* ── States 2–4: Expanded panel (300×400) ── */
+  /* ── States 2–5: Expanded panel (300×400) ── */
   .expanded-panel {
     width: 300px;
     height: 400px;
@@ -94,9 +144,10 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
   }
 
-  /* Header strip */
+  /* Header strip (44px, EkRed) */
   .header-strip {
     height: 44px;
     background: var(--ek-red);
@@ -120,11 +171,40 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .minimize-bar {
     width: 65%;
     height: 3px;
     background: var(--ek-off-white);
+  }
+
+  /* Version-drift amber band (sits directly below header) */
+  .version-band {
+    height: 26px;
+    background: var(--ek-amber);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  .version-band-text {
+    font-size: 10px;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .update-btn {
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+    background: rgba(0,0,0,0.30);
+    border: none;
+    padding: 0 8px;
+    height: 20px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
   }
 
   /* Code row */
@@ -140,6 +220,8 @@
     color: var(--ek-off-white);
     white-space: nowrap;
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .copy-btn, .icon-btn {
     font-size: 11px;
@@ -149,6 +231,7 @@
     cursor: pointer;
     height: 22px;
     padding: 0 6px;
+    flex-shrink: 0;
   }
   .icon-btn { width: 28px; }
 
@@ -179,6 +262,7 @@
     height: 20px;
     cursor: pointer;
     margin-right: 4px;
+    flex-shrink: 0;
   }
   .remove-btn {
     font-size: 10px;
@@ -188,6 +272,7 @@
     width: 20px;
     height: 20px;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .add-btn {
     font-size: 12px;
@@ -235,58 +320,91 @@
   .rejoin-btn { background: var(--ek-dark); }
   .rejoin-btn.active { background: var(--ek-green); }
 
-  /* ── State 4: Countdown overlay (placeholder for Group A) ── */
+  /* ── State 4: Countdown overlay ──
+     Semi-opaque black overlay covering panel interior below header.
+     Large centered digit (EkRed, 64px) + small hint text below.
+     Controlled by ShowRejoinPrompt()/HideRejoinPrompt()/OnAutoQueueCancelled().
+  ── */
   .countdown-overlay {
     position: absolute;
-    inset: 44px 0 0 0; /* below the header strip */
-    background: rgba(0, 0, 0, 0.82);
+    top: 44px;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 44px);
+    background: rgba(0, 0, 0, 0.80);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
     z-index: 10;
   }
-  .countdown-number {
+  .countdown-digit {
     font-size: 64px;
-    font-weight: bold;
     color: var(--ek-red);
+    font-weight: bold;
     line-height: 1;
-  }
-  .countdown-label {
-    font-size: 13px;
-    color: var(--ek-off-white);
-    letter-spacing: 1px;
+    margin-bottom: 12px;
   }
   .countdown-hint {
     font-size: 11px;
-    color: #888;
-    margin-top: 4px;
+    color: var(--ek-off-white);
+    margin-top: 0;
   }
 </style>
 </head>
 <body>
 
-<!-- MOCK DATA — edit these to test different scenarios
-     Lobby code : EK-A3F9C12B
-     Friends    : Alice (online), Bob (online + in room → kick btn), Carol (offline), Dave (offline)
-     Countdown  : shows "3" — change the digit to test other numbers
--->
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MOCK DATA — edit these values to test different scenarios
+     ──────────────────────────────────────────────────────────────────────
+     Lobby code   : EK-A3F9C12B
+     Party size   : 2 online (Alice, Bob) — shown in minimized pill
+     Friends      : Alice (online ●), Bob (online ●, in room → kick btn),
+                    Carol (offline ○), Dave (offline ○)
+     Countdown    : state 4 shows semi-opaque overlay with large "3" digit — change digit to preview 5→1
+     Version      : state 5 shows amber band "⚠ Version mismatch" + UPDATE button
+════════════════════════════════════════════════════════════════════════ -->
 
 <h1>EKLobbyMod — Overlay Preview</h1>
 <p class="subtitle">All states at 1× scale · edit &amp; save to reload · VS Code Live Server</p>
 
 <div class="states-grid">
-  <!-- ── State 1: Minimized ── -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       State 1: Minimized tab (220×40)
+       • 4px EkRed left accent
+       • Party dot (10×10 square) — green (#1F7A1F) when ≥2 in party
+       • "X in party" text (90px)
+       • Lobby code right-aligned (88px)
+       Layout mirrors OverlayPanel.BuildMinTab():
+         accent | dot@(8,13) | party-text@(26,12) | code@(124,12)
+       Two sub-variants shown: normal and version-drift (amber dot + amber code text)
+  ════════════════════════════════════════════════════════════════════ -->
   <div class="state-wrapper">
+    <!-- Sub-variant A: Normal (no drift) -->
     <div class="min-tab">
       <div class="accent"></div>
+      <div class="party-dot online"></div>
+      <span class="party-text">2 in party</span>
       <span class="code-text">EK-A3F9C12B</span>
     </div>
-    <span class="state-label">1 — Minimized</span>
+    <span class="state-label" style="margin-top:2px;margin-bottom:6px">1a — Minimized (normal)</span>
+    <!-- Sub-variant B: Version drift active — amber dot + amber code text (mirrors RefreshMinTabLabel()) -->
+    <div class="min-tab">
+      <div class="accent"></div>
+      <div class="party-dot online"></div>
+      <span class="party-text">2 in party</span>
+      <div class="drift-dot"></div>
+      <span class="code-text drift">EK-A3F9C12B</span>
+    </div>
+    <span class="state-label">1b — Minimized (drift)</span>
   </div>
 
-  <!-- ── State 2: Expanded ── -->
+  <!-- ═══════════════════════════════════════════════════════════════════
+       State 2: Expanded — normal in-lobby view
+       • Rejoin prompt hidden (visibility:hidden preserves layout height)
+       • REJOIN button in EkDark (inactive)
+  ════════════════════════════════════════════════════════════════════ -->
   <div class="state-wrapper">
     <div class="expanded-panel">
       <div class="header-strip">
@@ -327,7 +445,11 @@
     <span class="state-label">2 — Expanded</span>
   </div>
 
-  <!-- ── State 3: Post-game ── -->
+  <!-- ═══════════════════════════════════════════════════════════════════
+       State 3: Post-game / rejoin prompt
+       • Yellow "Game over" prompt visible
+       • REJOIN button turns EkGreen (active)
+  ════════════════════════════════════════════════════════════════════ -->
   <div class="state-wrapper">
     <div class="expanded-panel">
       <div class="header-strip">
@@ -368,12 +490,77 @@
     <span class="state-label">3 — Post-game</span>
   </div>
 
-  <!-- ── State 4: Countdown (placeholder — Group A feature) ── -->
+  <!-- ═══════════════════════════════════════════════════════════════════
+       State 4: Auto-queue countdown
+       • Full panel visible behind a semi-opaque black overlay
+       • Overlay covers interior below the 44px header
+       • Large centered EkRed digit (64px) + "Click Leave to cancel" hint
+       • ShowRejoinPrompt() activates overlay, sets digit to "5"
+       • RunCountdown() ticks digit 5→1 each second
+       • HideRejoinPrompt() / OnAutoQueueCancelled() deactivate overlay
+  ════════════════════════════════════════════════════════════════════ -->
   <div class="state-wrapper">
     <div class="expanded-panel">
       <div class="header-strip">
         <span class="header-title">MY LOBBY</span>
         <div class="minimize-btn"><div class="minimize-bar"></div></div>
+      </div>
+      <!-- Panel content visible behind overlay -->
+      <div class="code-row">
+        <span class="code-label">Code: EK-A3F9C12B</span>
+        <button class="copy-btn">Copy</button>
+        <button class="icon-btn">✏</button>
+      </div>
+      <div class="friend-list">
+        <div class="friend-row">
+          <span class="friend-name">● Alice</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row">
+          <span class="friend-name">● Bob</span>
+          <button class="kick-btn">kick</button>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Carol</span>
+          <button class="remove-btn">✕</button>
+        </div>
+        <div class="friend-row offline">
+          <span class="friend-name">○ Dave</span>
+          <button class="remove-btn">✕</button>
+        </div>
+      </div>
+      <button class="add-btn">+ Add</button>
+      <div class="rejoin-prompt">Game over — return to your lobby?</div>
+      <div class="action-row">
+        <button class="invite-btn">INVITE ALL</button>
+        <button class="rejoin-btn active">REJOIN</button>
+      </div>
+      <!-- Semi-opaque countdown overlay (position: absolute, covers below header) -->
+      <div class="countdown-overlay">
+        <div class="countdown-digit">3</div>
+        <div class="countdown-hint">Click Leave to cancel</div>
+      </div>
+    </div>
+    <span class="state-label">4 — Countdown</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       State 5: Version drift — amber warning band
+       • Appears between header strip and code row when local mod version
+         differs from the host's version (e.g. v1.0.0 vs host v1.1.0)
+       • Amber band (#D97706) with compact warning text + UPDATE button
+       • All other content identical to expanded state
+  ════════════════════════════════════════════════════════════════════ -->
+  <div class="state-wrapper">
+    <div class="expanded-panel">
+      <div class="header-strip">
+        <span class="header-title">MY LOBBY</span>
+        <div class="minimize-btn"><div class="minimize-bar"></div></div>
+      </div>
+      <div class="version-band">
+        <span class="version-band-text">⚠ Version mismatch</span>
+        <button class="update-btn">UPDATE</button>
       </div>
       <div class="code-row">
         <span class="code-label">Code: EK-A3F9C12B</span>
@@ -400,21 +587,15 @@
         </div>
       </div>
       <button class="add-btn">+ Add</button>
-      <div class="rejoin-prompt hidden">placeholder</div>
+      <div class="rejoin-prompt hidden">Game over — return to your lobby?</div>
       <div class="action-row">
         <button class="invite-btn">INVITE ALL</button>
         <button class="rejoin-btn">REJOIN</button>
       </div>
-      <!-- TODO: Group A — auto-queue countdown overlay -->
-      <div class="countdown-overlay">
-        <div class="countdown-number">3</div>
-        <div class="countdown-label">REJOINING LOBBY…</div>
-        <div class="countdown-hint">Click Leave in-game to cancel</div>
-      </div>
     </div>
-    <span class="state-label">4 — Countdown</span>
+    <span class="state-label">5 — Version Drift</span>
   </div>
-</div>
 
+</div>
 </body>
 </html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Exploding Kittens 2 Lobby</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ek-black:     #0f0f0f;
+    --ek-red:       #81242D;
+    --ek-off-white: #FCF8EE;
+    --ek-dark:      #242424;
+  }
+  body {
+    background: var(--ek-black);
+    color: var(--ek-off-white);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: var(--ek-dark);
+    border-top: 4px solid var(--ek-red);
+    border-radius: 4px;
+    padding: 40px 48px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 32px;
+  }
+  .code-label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 10px;
+  }
+  .code-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .code-value {
+    font-size: 28px;
+    font-weight: bold;
+    font-family: monospace;
+    color: var(--ek-off-white);
+    background: var(--ek-black);
+    border: 1px solid #333;
+    padding: 10px 20px;
+    border-radius: 3px;
+    letter-spacing: 3px;
+  }
+  .copy-btn {
+    background: var(--ek-red);
+    color: var(--ek-off-white);
+    border: none;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    transition: opacity 0.15s;
+  }
+  .copy-btn:hover { opacity: 0.85; }
+  .copy-btn.copied { background: #1E7A1E; }
+  .steps {
+    text-align: left;
+    font-size: 14px;
+    line-height: 2;
+    color: #bbb;
+  }
+  .steps strong { color: var(--ek-off-white); }
+  .no-code {
+    color: #888;
+    font-size: 15px;
+  }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div id="invite-view">
+    <h1>You're invited!</h1>
+    <p class="subtitle">Join an Exploding Kittens 2 lobby</p>
+    <p class="code-label">Room code</p>
+    <div class="code-box">
+      <span class="code-value" id="code-display">—</span>
+      <button class="copy-btn" id="copy-btn" onclick="copyCode()">COPY</button>
+    </div>
+    <ol class="steps">
+      <li>Open <strong>Exploding Kittens 2</strong> on Steam</li>
+      <li>Click the <strong>EK Lobby</strong> tab (bottom-left corner)</li>
+      <li>Click the <strong>✏ pencil icon</strong> next to your code</li>
+      <li>Paste <strong id="code-inline">the code</strong> and click <strong>💾</strong></li>
+    </ol>
+  </div>
+  <div id="no-code-view" style="display:none">
+    <p class="no-code">No room code found in this link.<br>Ask the host to share their invite link again.</p>
+  </div>
+</div>
+
+<script>
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code') || '';
+    if (code && /^EK-[0-9A-Fa-f]{8}$/.test(code)) {
+      document.getElementById('code-display').textContent = code;
+      document.getElementById('code-inline').textContent = code;
+    } else {
+      document.getElementById('invite-view').style.display = 'none';
+      document.getElementById('no-code-view').style.display = '';
+    }
+  })();
+
+  function copyCode() {
+    var code = document.getElementById('code-display').textContent;
+    if (!code || code === '—') return;
+    navigator.clipboard.writeText(code).then(function() {
+      var btn = document.getElementById('copy-btn');
+      btn.textContent = 'COPIED!';
+      btn.classList.add('copied');
+      setTimeout(function() {
+        btn.textContent = 'COPY';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+</body>
+</html>

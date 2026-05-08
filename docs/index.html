@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EKLobbyMod — Add parties and auto-queueing to Exploding Kittens 2.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ek-black:     #0F0F0F;
+      --ek-red:       #81242D;
+      --ek-off-white: #FCF8EE;
+      --ek-dark:      #242424;
+      --ek-red-dark:  #52141A;
+      --ek-green:     #1F7A1F;
+      --ek-gray:      #737373;
+      --ek-amber:     #FF8C00;
+      --ek-border:    #2e2e2e;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      background: var(--ek-black);
+      color: var(--ek-off-white);
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 17px;
+      line-height: 1.6;
+      /* 4px EkRed left accent — the overlay's signature strip */
+      border-left: 4px solid var(--ek-red);
+      min-height: 100vh;
+    }
+
+    body {
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+      opacity: 0.03;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Scanlines */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 1px,
+        rgba(0,0,0,0.03) 1px,
+        rgba(0,0,0,0.03) 2px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── Layout ── */
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 32px 64px;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 40px 0 32px;
+      border-bottom: 1px solid var(--ek-red);
+      margin-bottom: 48px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      animation: fadeDown 0.5s ease both;
+    }
+
+    .header-left {}
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .title-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--ek-red);
+      flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(129, 36, 45, 0.7);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(129, 36, 45, 0.7); }
+      50%       { box-shadow: 0 0 16px rgba(129, 36, 45, 1); }
+    }
+
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 6vw, 56px);
+      letter-spacing: 0.06em;
+      color: var(--ek-off-white);
+      line-height: 1;
+    }
+
+    .tagline {
+      font-family: 'Crimson Pro', serif;
+      font-style: italic;
+      font-size: 17px;
+      color: var(--ek-gray);
+      padding-left: 22px;
+    }
+
+    .version-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--ek-gray);
+      background: var(--ek-dark);
+      border: 1px solid var(--ek-border);
+      border-radius: 3px;
+      padding: 4px 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 6px;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Cards grid ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 800px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--ek-dark);
+      border: 1px solid var(--ek-border);
+      border-left: 4px solid var(--ek-red);
+      padding: 28px 24px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      opacity: 0;
+      animation: slideUp 0.45s ease forwards;
+    }
+
+    .card:nth-child(1) { animation-delay: 0.15s; }
+    .card:nth-child(2) { animation-delay: 0.28s; }
+    .card:nth-child(3) { animation-delay: 0.41s; }
+
+    .card:hover {
+      transform: translateX(-2px);
+      box-shadow: -4px 0 20px rgba(129, 36, 45, 0.3);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--ek-red);
+      margin-bottom: 20px;
+    }
+
+    .card-header h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      color: var(--ek-off-white);
+      line-height: 1;
+    }
+
+    .card-icon {
+      font-size: 14px;
+      color: var(--ek-red);
+      opacity: 0.8;
+    }
+
+    /* ── DOCS card ── */
+    .doc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .doc-item a {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      group: true;
+    }
+
+    .doc-item a:hover .doc-slug { color: var(--ek-off-white); }
+    .doc-item a:hover .doc-slug::after {
+      width: 100%;
+    }
+
+    .doc-slug {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--ek-red);
+      background: var(--ek-black);
+      border-radius: 2px;
+      padding: 1px 6px;
+      letter-spacing: 0.04em;
+      display: inline-block;
+      position: relative;
+      margin-bottom: 3px;
+      transition: color 0.15s;
+    }
+
+    .doc-slug::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 0;
+      height: 1px;
+      background: var(--ek-red);
+      transition: width 0.2s ease;
+    }
+
+    .doc-item a:hover .doc-slug::after { width: 100%; }
+
+    .doc-desc {
+      font-family: 'Crimson Pro', serif;
+      font-size: 18px;
+      color: var(--ek-gray);
+      line-height: 1.4;
+    }
+
+    /* ── MOCKS card ── */
+    .mock-thumbnail {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* CSS-only minimized tab recreation */
+    .mini-tab {
+      width: 100%;
+      max-width: 220px;
+      height: 36px;
+      background: rgba(15,15,15,0.97);
+      border-left: 3px solid var(--ek-red);
+      border-radius: 0 2px 2px 0;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+    }
+
+    .mini-tab-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ek-green);
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    .mini-tab-party {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ek-gray);
+      white-space: nowrap;
+    }
+
+    .mini-tab-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ek-off-white);
+      margin-left: auto;
+      opacity: 0.7;
+    }
+
+    .mock-caption {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--ek-gray);
+      line-height: 1.5;
+    }
+
+    .mock-states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+      margin-bottom: 20px;
+    }
+
+    .state-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--ek-gray);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--ek-border);
+      border-radius: 2px;
+      padding: 2px 6px;
+    }
+
+    /* ── DOWNLOADS card ── */
+    .version-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .dl-version {
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      color: var(--ek-off-white);
+      background: rgba(129, 36, 45, 0.15);
+      border: 1px solid rgba(129, 36, 45, 0.4);
+      border-radius: 3px;
+      padding: 3px 10px;
+    }
+
+    .dl-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--ek-gray);
+    }
+
+    /* Buttons */
+    .btn {
+      display: block;
+      width: 100%;
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      text-align: center;
+      text-decoration: none;
+      padding: 11px 16px;
+      border: none;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-green {
+      background: var(--ek-green);
+      color: var(--ek-off-white);
+    }
+
+    .btn-green:hover { filter: brightness(1.2); }
+
+    .btn-green[data-placeholder="true"] {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .btn-green[data-placeholder="true"]:hover { filter: none; }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--ek-off-white);
+      border: 1px solid var(--ek-border);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--ek-red);
+      color: var(--ek-off-white);
+    }
+
+    .btn-red {
+      background: transparent;
+      color: var(--ek-off-white);
+      border: 1px solid rgba(129, 36, 45, 0.6);
+    }
+
+    .btn-red:hover {
+      background: rgba(129, 36, 45, 0.15);
+      border-color: var(--ek-red);
+    }
+
+    .placeholder-note {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--ek-gray);
+      text-align: center;
+      margin-top: 8px;
+      opacity: 0.7;
+    }
+
+    .dl-divider {
+      border: none;
+      border-top: 1px solid var(--ek-border);
+      margin: 18px 0;
+    }
+
+    .dl-secondary {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .install-steps {
+      counter-reset: steps;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .install-steps li {
+      counter-increment: steps;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-family: 'Crimson Pro', serif;
+      font-size: 18px;
+      color: var(--ek-gray);
+      line-height: 1.4;
+    }
+
+    .install-steps li::before {
+      content: counter(steps);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--ek-red);
+      background: var(--ek-black);
+      border: 1px solid rgba(129, 36, 45, 0.4);
+      border-radius: 2px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .oneliner-label {
+      font-family: 'Crimson Pro', serif;
+      font-size: 14px;
+      color: var(--ek-gray);
+      margin-bottom: 8px;
+    }
+
+    .oneliner-block {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--ek-black);
+      border: 1px solid rgba(129, 36, 45, 0.35);
+      border-radius: 3px;
+      padding: 10px 12px;
+    }
+
+    .oneliner-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--ek-off-white);
+      flex: 1;
+      user-select: all;
+    }
+
+    .oneliner-copy {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ek-gray);
+      background: transparent;
+      border: 1px solid #444;
+      border-radius: 2px;
+      padding: 3px 8px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .oneliner-copy:hover {
+      color: var(--ek-off-white);
+      border-color: var(--ek-red);
+    }
+
+    .install-note {
+      font-family: 'Crimson Pro', serif;
+      font-size: 14px;
+      color: var(--ek-gray);
+      margin-top: 10px;
+      opacity: 0.75;
+    }
+
+    code {
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 2px;
+      color: var(--ek-off-white);
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 64px;
+      padding-top: 20px;
+      border-top: 1px solid var(--ek-red);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      animation: fadeDown 0.5s ease 0.6s both;
+    }
+
+    .footer-left {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ek-gray);
+      letter-spacing: 0.04em;
+    }
+
+    .footer-left span {
+      color: rgba(115,115,115,0.5);
+      margin: 0 6px;
+    }
+
+    .footer-right a {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ek-gray);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .footer-right a:hover {
+      color: var(--ek-off-white);
+      border-color: var(--ek-red);
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header>
+      <div class="header-left">
+        <div class="header-title">
+          <div class="title-dot"></div>
+          <h1>Exploding Kittens 2 Lobby Mod</h1>
+        </div>
+        <p class="tagline">Add parties and auto-queueing to Exploding Kittens 2.</p>
+      </div>
+      <div class="version-badge">v1.1.0</div>
+    </header>
+
+    <div class="cards">
+
+      <!-- DOCS -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">▣</span>
+          <h2>Docs</h2>
+        </div>
+        <ul class="doc-list">
+          <li class="doc-item">
+            <a href="superpowers/specs/2026-05-08-ek-lobby-mod-design.md" target="_blank">
+              <div class="doc-slug">ek-lobby-mod-design</div>
+              <div class="doc-desc">Core architecture — persistent Photon lobby, in-game overlay, and system tray companion.</div>
+            </a>
+          </li>
+          <li class="doc-item">
+            <a href="superpowers/specs/2026-05-08-party-ux-design.md" target="_blank">
+              <div class="doc-slug">party-ux-design</div>
+              <div class="doc-desc">Auto-queue countdown (5→1) and live party occupancy indicator in the minimized tab.</div>
+            </a>
+          </li>
+          <li class="doc-item">
+            <a href="superpowers/specs/2026-05-08-version-maintenance-design.md" target="_blank">
+              <div class="doc-slug">version-maintenance-design</div>
+              <div class="doc-desc">Peer version broadcast, drift detection with amber warning band, and update flow.</div>
+            </a>
+          </li>
+          <li class="doc-item">
+            <a href="superpowers/specs/2026-05-08-dev-tooling-design.md" target="_blank">
+              <div class="doc-slug">dev-tooling-design</div>
+              <div class="doc-desc">Browser-based overlay mock for iterating on UI without launching the game.</div>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <!-- MOCKS -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">◈</span>
+          <h2>Mocks</h2>
+        </div>
+
+        <div class="mock-thumbnail">
+          <!-- CSS-only miniature overlay tab recreation -->
+          <div class="mini-tab">
+            <div class="mini-tab-dot"></div>
+            <span class="mini-tab-party">2 in party</span>
+            <span class="mini-tab-code">EK-A3F9C12B</span>
+          </div>
+        </div>
+
+        <div class="mock-states">
+          <span class="state-tag">minimized</span>
+          <span class="state-tag">expanded</span>
+          <span class="state-tag">post-game</span>
+          <span class="state-tag">countdown</span>
+          <span class="state-tag">version drift</span>
+        </div>
+
+        <p class="mock-caption" style="margin-bottom: 18px;">
+          All overlay states side-by-side — pixel-faithful to the in-game UI. Open locally; no server required.
+        </p>
+
+        <a class="btn btn-red" href="../mock/overlay.html" target="_blank">
+          OPEN OVERLAY PREVIEW →
+        </a>
+      </div>
+
+      <!-- DOWNLOADS -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">↓</span>
+          <h2>Downloads</h2>
+        </div>
+
+        <div class="version-row">
+          <span class="dl-version">v1.1.0</span>
+          <span class="dl-label">latest</span>
+        </div>
+
+        <a class="btn btn-green" href="#" data-placeholder="true" aria-disabled="true">
+          ↓ &nbsp;DOWNLOAD EKLobbyMod-v1.1.0.zip
+        </a>
+        <p class="placeholder-note">
+          Releases at github.com/adamhurm/exploding-kittens-2-lobby-mod/releases<br>
+          (CI/CD pipeline pending)
+        </p>
+
+        <hr class="dl-divider">
+
+        <p class="oneliner-label">Or install in one line — paste into PowerShell:</p>
+        <div class="oneliner-block">
+          <span class="oneliner-code">irm ek.bring-us.com/get | iex</span>
+          <button class="oneliner-copy" onclick="navigator.clipboard.writeText('irm ek.bring-us.com/get | iex')">Copy</button>
+        </div>
+
+        <hr class="dl-divider">
+
+        <div class="dl-secondary">
+          <a class="btn btn-outline" href="../distribute/Install.ps1" download>
+            Install.ps1
+          </a>
+          <a class="btn btn-outline" href="../distribute/Uninstall.ps1" download>
+            Uninstall.ps1
+          </a>
+        </div>
+
+        <ol class="install-steps">
+          <li>Download and unzip <code>EKLobbyMod-v1.1.0.zip</code></li>
+          <li>Double-click <code>RunInstall.bat</code></li>
+          <li>Launch Exploding Kittens 2</li>
+        </ol>
+        <p class="install-note">If the installer fails, right-click <code>RunInstall.bat</code> and choose <em>Run as administrator</em>.</p>
+      </div>
+
+    </div><!-- /.cards -->
+
+    <footer>
+      <div class="footer-left">
+        Exploding Kittens 2 Lobby Mod
+        <span>·</span>
+        adamhurm
+        <span>·</span>
+        MIT License
+      </div>
+      <div class="footer-right">
+        <a href="https://github.com/adamhurm/exploding-kittens-2-lobby-mod" target="_blank">
+          Source on GitHub →
+        </a>
+      </div>
+    </footer>
+
+  </div><!-- /.page -->
+</body>
+</html>

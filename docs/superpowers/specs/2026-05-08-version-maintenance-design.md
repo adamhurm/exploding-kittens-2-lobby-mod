@@ -125,7 +125,7 @@ The warning band contains:
 - Left-aligned text: `"⚠ Version mismatch"` (font size `(int)(11 * _s)`, color black for legibility on amber).
 - Right-aligned "Update" button (`52 * _s` wide, `18 * _s` tall), dark red background, white text.
 
-**"Update" button behavior:** Calls `Application.OpenURL(Plugin.ReleasesUrl)`. `ReleasesUrl` is a `const string` in `Plugin.cs` set to `"https://github.com/adamhurm/exploding-kittens-mod/releases"` — a single point of maintenance.
+**"Update" button behavior:** Calls `Application.OpenURL(Plugin.ReleasesUrl)`. `ReleasesUrl` is a `const string` in `Plugin.cs` set to `"https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases"` — a single point of maintenance.
 
 The band is hidden by default (`SetActive(false)`). `OverlayPanel` subscribes to `LobbyManager.VersionMapChanged` and calls `SetVersionDriftVisible(bool)` to toggle it.
 

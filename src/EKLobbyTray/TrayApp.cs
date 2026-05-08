@@ -55,6 +55,7 @@ public class TrayApp : IDisposable
         var menu = new ContextMenuStrip();
 
         var codeItem = new ToolStripMenuItem($"Lobby code: {_config.LobbyRoomName}");
+        // NOTE: Room code is non-secret (shared with friends). Clipboard exposure is acceptable.
         codeItem.Click += (_, _) => Clipboard.SetText(_config.LobbyRoomName);
         menu.Items.Add(codeItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -66,7 +67,7 @@ public class TrayApp : IDisposable
         foreach (var friend in _config.Friends)
         {
             var f = friend;
-            var friendItem = new ToolStripMenuItem(f.DisplayName);
+            var friendItem = new ToolStripMenuItem(TruncateDisplayName(f.DisplayName));
             var removeItem = new ToolStripMenuItem("Remove from list");
             removeItem.Click += (_, _) =>
             {
@@ -112,11 +113,17 @@ public class TrayApp : IDisposable
         var items = new List<string>();
         items.Add($"Lobby code: {config.LobbyRoomName}");
         items.Add("Invite All Friends");
-        foreach (var f in config.Friends) items.Add(f.DisplayName);
+        foreach (var f in config.Friends) items.Add(TruncateDisplayName(f.DisplayName));
         items.Add("Launch Game");
         items.Add("Start with Windows");
         items.Add("Quit");
         return items;
+    }
+
+    private static string TruncateDisplayName(string name, int maxLen = 35)
+    {
+        if (string.IsNullOrEmpty(name)) return "(no name)";
+        return name.Length <= maxLen ? name : name[..maxLen] + "...";
     }
 
     public void Dispose()

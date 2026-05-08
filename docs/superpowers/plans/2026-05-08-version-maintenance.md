@@ -132,7 +132,7 @@ No new test projects — the new code touches only in-game Photon and Unity APIs
   Open `src/EKLobbyMod/Plugin.cs`. After the existing `PluginVersion` constant, add one new constant:
 
   ```csharp
-  public const string ReleasesUrl = "https://github.com/adamhurm/exploding-kittens-mod/releases";
+  public const string ReleasesUrl = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases";
   ```
 
   The top of the class will then read:
@@ -141,7 +141,7 @@ No new test projects — the new code touches only in-game Photon and Unity APIs
   public const string PluginGuid    = "com.eklobbymod.plugin";
   public const string PluginName    = "EKLobbyMod";
   public const string PluginVersion = "1.0.0";
-  public const string ReleasesUrl   = "https://github.com/adamhurm/exploding-kittens-mod/releases";
+  public const string ReleasesUrl   = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases";
   ```
 
 - [ ] **Step 3: Build to confirm the reference resolves**

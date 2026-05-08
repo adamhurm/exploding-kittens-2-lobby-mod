@@ -38,14 +38,13 @@ public static class SteamInviter
         return state != EPersonaState.k_EPersonaStateOffline;
     }
 
-    public static void InviteAll(IEnumerable<string> steam64Ids)
+    public static void InviteAll(IEnumerable<string> steam64Ids, string connectString = "")
     {
         if (!SteamManager.Instance || !SteamManager.Initialized) return;
         foreach (var idStr in steam64Ids)
         {
             if (!ulong.TryParse(idStr, out var raw)) continue;
-            // Empty connect string — the invitee uses their own Rejoin button to enter our room
-            SteamFriends.InviteUserToGame(new CSteamID(raw), "");
+            SteamFriends.InviteUserToGame(new CSteamID(raw), connectString);
         }
     }
 }
