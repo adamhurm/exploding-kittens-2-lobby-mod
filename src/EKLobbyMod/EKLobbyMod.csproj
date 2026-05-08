@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>EKLobbyMod</AssemblyName>
+    <RootNamespace>EKLobbyMod</RootNamespace>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- BepInEx core DLLs from game install -->
+    <Reference Include="BepInEx.Core">
+      <HintPath>$(BepInExDir)\core\BepInEx.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.IL2CPP">
+      <HintPath>$(BepInExDir)\core\BepInEx.IL2CPP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(BepInExDir)\core\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <!-- Game type stubs from BepInEx interop (generated on first game launch) -->
+    <Reference Include="PhotonRealtime">
+      <HintPath>$(BepInExDir)\interop\PhotonRealtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MGS.Platform">
+      <HintPath>$(BepInExDir)\interop\MGS.Platform.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(BepInExDir)\interop\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(BepInExDir)\interop\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextMeshPro">
+      <HintPath>$(BepInExDir)\interop\Unity.TextMeshPro.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EKLobbyShared\EKLobbyShared.csproj" />
+  </ItemGroup>
+</Project>
