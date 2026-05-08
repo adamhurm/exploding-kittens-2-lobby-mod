@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package:
+    name: Build & attach release ZIP
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+
+      # BepInEx core DLLs (interop DLLs are committed under libs/BepInEx/interop/)
+      - name: Download BepInEx core
+        shell: pwsh
+        run: |
+          $url = "https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
+          Invoke-WebRequest $url -OutFile bepinex.zip -UseBasicParsing
+          Expand-Archive bepinex.zip -DestinationPath libs\BepInEx -Force
+          Remove-Item bepinex.zip
+
+      - name: Build and package
+        shell: pwsh
+        run: .\package.ps1
+
+      - name: Upload ZIP to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $zip = Get-ChildItem releases\*.zip | Select-Object -First 1
+          gh release upload ${{ github.event.release.tag_name }} $zip.FullName --clobber
+
+  deploy-pages:
+    name: Deploy ek.bring-us.com
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy hosting/ek.bring-us.com/public --project-name=ek-bring-us-com
