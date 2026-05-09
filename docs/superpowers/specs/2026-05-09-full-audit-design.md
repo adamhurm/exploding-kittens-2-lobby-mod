@@ -210,10 +210,10 @@ full unit test coverage and why that is expected, not an oversight.
 
 | Project | Tests | Pass |
 |---------|-------|------|
-| `EKLobbyMod.Tests` | 13 | 13 |
-| `EKLobbyShared.Tests` | 9 | 9 |
-| `EKLobbyTray.Tests` | 7 | 7 |
-| **Total** | **29** | **29** |
+| `EKLobbyMod.Tests` | 17 | 17 |
+| `EKLobbyShared.Tests` | 14 | 14 |
+| `EKLobbyTray.Tests` | 17 | 16 + 1 skip |
+| **Total** | **48** | **47 pass, 1 skip** |
 
 ### What Is Covered
 

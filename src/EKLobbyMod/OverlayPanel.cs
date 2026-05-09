@@ -346,7 +346,7 @@ public class OverlayPanel : MonoBehaviour
         cdLeaveBtn.onClick.AddListener((UnityEngine.Events.UnityAction)DoLeave);
 
         // ── Bottom row — two buttons visible at a time depending on game state ────
-        // Home lobby:  INVITE ALL | REJOIN
+        // Home lobby:  INVITE ALL | RECREATE
         // In-game:     INVITE ALL | LEAVE
         // Post-game:   PLAY AGAIN | LEAVE
 
