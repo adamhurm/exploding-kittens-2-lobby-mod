@@ -13,7 +13,7 @@ public class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.eklobbymod.plugin";
     public const string PluginName = "EKLobbyMod";
-    public const string PluginVersion = "1.1.10";
+    public const string PluginVersion = "1.1.11";
     public const string ReleasesUrl   = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases";
 
     // 'new' shadows BasePlugin.Log (instance) with a static field accessible by other classes
@@ -62,7 +62,7 @@ public class Plugin : BasePlugin
                 }
                 else
                 {
-                    Log.LogWarning($"Cold launch: +connect arg failed validation (length={connectArg?.Length ?? 0}) — ignored");
+                    Log.LogWarning($"Cold launch: +connect arg failed validation (length={connectArg?.Length ?? 0}) - ignored");
                 }
                 break;
             }
