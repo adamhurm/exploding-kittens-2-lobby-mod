@@ -3,7 +3,6 @@ using BepInEx.Unity.IL2CPP;
 using BepInEx.Logging;
 using HarmonyLib;
 using Il2CppInterop.Runtime.Injection;
-using Steamworks;
 using UnityEngine.SceneManagement;
 
 namespace EKLobbyMod;
@@ -25,9 +24,6 @@ public class Plugin : BasePlugin
     // Pending +connect arg from cold-launch command line; applied in LobbyManager.Initialize()
     internal string? _pendingConnectArg;
 
-    // Kept as a field to prevent GC collection of the callback
-    private Callback<GameRichPresenceJoinRequested_t> _joinRequestedCallback;
-
     public override void Load()
     {
         Log = base.Log;
@@ -37,16 +33,6 @@ public class Plugin : BasePlugin
         ClassInjector.RegisterTypeInIl2Cpp<FriendPickerPopup>();
         new Harmony(PluginGuid).PatchAll();
         SceneManager.sceneLoaded += new System.Action<Scene, LoadSceneMode>(OnSceneLoaded);
-        try
-        {
-            _joinRequestedCallback = Callback<GameRichPresenceJoinRequested_t>.Create(
-                new System.Action<GameRichPresenceJoinRequested_t>(OnGameJoinRequested));
-            Log.LogInfo("Steam join callback registered");
-        }
-        catch (System.Exception ex)
-        {
-            Log.LogWarning($"Steam join callback unavailable ({ex.GetType().Name}): {ex.Message}");
-        }
 
         // Cold-launch: Steam may pass the room code as a command-line arg
         var args = System.Environment.GetCommandLineArgs();
@@ -77,17 +63,4 @@ public class Plugin : BasePlugin
             OverlayPanel.Inject(manager);
     }
 
-    private static void OnGameJoinRequested(GameRichPresenceJoinRequested_t param)
-    {
-        var connect = param.m_rgchConnect;
-        Log.LogInfo($"Steam join requested ({connect?.Length ?? 0} chars)");
-        if (string.IsNullOrEmpty(connect)) return;
-        if (LobbyManager.Instance != null)
-            LobbyManager.Instance.JoinRoomByInvite(connect);
-        else
-        {
-            Instance._pendingConnectArg = connect;
-            Log.LogInfo("Steam join: LobbyManager not ready, stored as pending");
-        }
-    }
 }
