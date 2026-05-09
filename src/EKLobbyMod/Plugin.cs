@@ -13,7 +13,7 @@ public class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.eklobbymod.plugin";
     public const string PluginName = "EKLobbyMod";
-    public const string PluginVersion = "1.1.4";
+    public const string PluginVersion = "1.1.5";
     public const string ReleasesUrl   = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases";
 
     // 'new' shadows BasePlugin.Log (instance) with a static field accessible by other classes
@@ -37,8 +37,15 @@ public class Plugin : BasePlugin
         ClassInjector.RegisterTypeInIl2Cpp<FriendPickerPopup>();
         new Harmony(PluginGuid).PatchAll();
         SceneManager.sceneLoaded += new System.Action<Scene, LoadSceneMode>(OnSceneLoaded);
-        _joinRequestedCallback = Callback<GameRichPresenceJoinRequested_t>.Create(
-            new System.Action<GameRichPresenceJoinRequested_t>(OnGameJoinRequested));
+        try
+        {
+            _joinRequestedCallback = Callback<GameRichPresenceJoinRequested_t>.Create(
+                new System.Action<GameRichPresenceJoinRequested_t>(OnGameJoinRequested));
+        }
+        catch (System.Exception ex)
+        {
+            Log.LogWarning($"Steam join callback unavailable (non-blittable struct): {ex.Message}");
+        }
 
         // Cold-launch: Steam may pass the room code as a command-line arg
         var args = System.Environment.GetCommandLineArgs();
