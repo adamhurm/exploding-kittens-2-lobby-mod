@@ -6,6 +6,8 @@
     <!-- Nullable must be disabled: IL2CPP interop assemblies redirect mscorlib in a way
          that hides NullableAttribute, causing CS0656 when nullable=enable emits it. -->
     <Nullable>disable</Nullable>
+    <!-- Suppress CS8632: files deliberately use ? annotations despite project-level disable. -->
+    <NoWarn>$(NoWarn);CS8632</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <!-- BepInEx core DLLs -->
