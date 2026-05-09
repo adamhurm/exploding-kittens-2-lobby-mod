@@ -8,8 +8,8 @@
 #>
 
 $ErrorActionPreference = "Stop"
-$version = "v1.1.17"
-$zipUrl  = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases/download/v1.1.17/EKLobbyMod-v1.1.17.zip"
+$version = "v1.1.18"
+$zipUrl  = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases/download/v1.1.18/EKLobbyMod-v1.1.18.zip"
 
 Write-Host ""
 Write-Host "  EKLobbyMod Installer" -ForegroundColor White
