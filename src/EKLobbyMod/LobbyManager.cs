@@ -20,6 +20,10 @@ public class LobbyManager
     private string _lastLoggedRoom = "";
     private ulong _localSteamId;
 
+    // True only when we are inside our own home lobby room (not a game/matchmaking room).
+    // Used to ignore OnJoinedRoom/OnLeftRoom events from internal Photon rooms.
+    private bool _inHomeLobby = false;
+
     // Steam64 IDs of players currently connected to this Photon room.
     // Assumes PhotonNetwork.UserId == Steam64 ID string (standard for Steam+Photon games).
     private readonly HashSet<string> _roomSteamIds = new HashSet<string>();
@@ -63,6 +67,9 @@ public class LobbyManager
         Config = ConfigStore.Load();
         _controller.add_OnPlayerEnteredRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerEntered));
         _controller.add_OnPlayerLeftRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerLeft));
+        _controller.add_OnPlayerPropertiesChangedEvent(
+            new System.Action<NetworkPlayer, Il2CppSystem.Collections.Generic.Dictionary<string, Il2CppSystem.Object>>(
+                (p, _) => HandlePlayerPropertiesUpdate(p)));
         Plugin.Log.LogInfo($"LobbyManager ready — home lobby: {Config.LobbyRoomName}");
     }
 
@@ -154,6 +161,7 @@ public class LobbyManager
             ConfigStore.Save(Config);
         }
         _joinOrCreatePending = false;
+        _inHomeLobby = true;
         _controller.AllowKickPlayers(true);
         RefreshRoomPlayers();
         Plugin.Log.LogInfo($"Room created: {name}");
@@ -161,6 +169,14 @@ public class LobbyManager
 
     internal void HandleJoinedRoom()
     {
+        var roomName = _controller.GetRoomName();
+        if (roomName != Config.LobbyRoomName)
+        {
+            Plugin.Log.LogDebug($"OnJoinedRoom: ignoring non-lobby room '{roomName}'");
+            _joinOrCreatePending = false;
+            return;
+        }
+        _inHomeLobby = true;
         _joinOrCreatePending = false;
         PendingRejoin = false;
         AutoQueueActive = false;
@@ -168,8 +184,7 @@ public class LobbyManager
         RefreshRoomPlayers();
         PhotonPropertyHelper.SetLocalVersion(Plugin.PluginVersion);
         RebuildVersionMap();
-        var roomName = _controller.GetRoomName();
-        if (!string.IsNullOrEmpty(roomName) && roomName != _lastLoggedRoom)
+        if (roomName != _lastLoggedRoom)
         {
             Plugin.Log.LogInfo($"Joined room: {roomName}");
             _lastLoggedRoom = roomName;
@@ -178,6 +193,9 @@ public class LobbyManager
 
     internal void HandleLeftRoom()
     {
+        if (!_inHomeLobby) return;
+        _inHomeLobby = false;
+
         if (AutoQueueActive)
         {
             // A second OnLeftRoom while the countdown is running means the player clicked
@@ -206,7 +224,7 @@ public class LobbyManager
 
     private void HandlePlayerEntered(NetworkPlayer player)
     {
-        if (player == null) return;
+        if (!_inHomeLobby || player == null) return;
         var uid = player.UserId;
         if (!string.IsNullOrEmpty(uid))
         {
@@ -224,7 +242,7 @@ public class LobbyManager
 
     private void HandlePlayerLeft(NetworkPlayer player)
     {
-        if (player == null) return;
+        if (!_inHomeLobby || player == null) return;
         var uid = player.UserId ?? "";
         _roomSteamIds.Remove(uid);
         PlayerListChanged?.Invoke();
@@ -235,7 +253,14 @@ public class LobbyManager
     private void RefreshRoomPlayers()
     {
         _roomSteamIds.Clear();
-        var players = _controller.GetRoomPlayers();
+        Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<NetworkPlayer> players;
+        try { players = _controller.GetRoomPlayers(); }
+        catch (System.Exception ex)
+        {
+            Plugin.Log.LogWarning($"[LobbyManager] GetRoomPlayers threw (room not ready yet): {ex.Message}");
+            PlayerListChanged?.Invoke();
+            return;
+        }
         if (players != null)
             foreach (var p in players)
                 if (p != null && !string.IsNullOrEmpty(p.UserId))
@@ -246,7 +271,14 @@ public class LobbyManager
     private void RebuildVersionMap()
     {
         _peerVersions.Clear();
-        var players = _controller.GetRoomPlayers();
+        Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<NetworkPlayer> players;
+        try { players = _controller.GetRoomPlayers(); }
+        catch (System.Exception ex)
+        {
+            Plugin.Log.LogWarning($"[LobbyManager] GetRoomPlayers threw in RebuildVersionMap: {ex.Message}");
+            VersionMapChanged?.Invoke();
+            return;
+        }
         if (players == null)
         {
             VersionMapChanged?.Invoke();
@@ -322,36 +354,4 @@ public class LobbyManager
             Instance?.HandleJoinRoomFailed(returnCode, message);
     }
 
-    [HarmonyPatch(typeof(PhotonMatchMakingHandler), "OnPlayerPropertiesUpdate")]
-    class Patch_OnPlayerPropertiesUpdate
-    {
-        // Photon signature: OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
-        // In IL2CPP interop the first parameter is the interop-wrapped Player type.
-        // We find the matching NetworkPlayer by UserId via GetRoomPlayers().
-        static void Postfix(Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase targetPlayer)
-        {
-            if (Instance == null) return;
-            try
-            {
-                // Cast to Photon.Realtime.Player to get UserId
-                var photonPlayer = targetPlayer.TryCast<Photon.Realtime.Player>();
-                if (photonPlayer == null) return;
-                var players = Instance._controller.GetRoomPlayers();
-                if (players == null) return;
-                foreach (var p in players)
-                {
-                    if (p != null && p.UserId == photonPlayer.UserId)
-                    {
-                        Instance.HandlePlayerPropertiesUpdate(p);
-                        return;
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Plugin.Log.LogWarning(
-                    $"[Patch_OnPlayerPropertiesUpdate] {ex.Message}");
-            }
-        }
-    }
 }
