@@ -97,4 +97,9 @@
   <ItemGroup>
     <ProjectReference Include="..\EKLobbyShared\EKLobbyShared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>EKLobbyMod.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

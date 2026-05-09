@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using EKLobbyShared;
 using HarmonyLib;
-using MGS.Network;
 using MGS.Network.Photon;
 
 namespace EKLobbyMod;
@@ -10,7 +9,7 @@ public class LobbyManager
 {
     public static LobbyManager Instance { get; private set; }
 
-    private readonly IMultiplayerController _controller;
+    private readonly IPhotonBridge _bridge;
     public LobbyConfig Config { get; private set; }
     public bool PendingRejoin { get; private set; }
 
@@ -82,30 +81,34 @@ public class LobbyManager
     public bool InHomeLobby => _inHomeLobby;
 
     public IReadOnlyCollection<string> RoomSteamIds => _roomSteamIds;
-    public bool IsMasterClient => _controller.IsMasterClient();
+    public bool IsMasterClient => _bridge.IsMasterClient();
 
-    private LobbyManager(IMultiplayerController controller)
+    // Wired by Plugin.Load() to real BepInEx logging; default to no-ops so tests can
+    // instantiate LobbyManager without BepInEx.Core in the output directory.
+    internal static Action<string> LogInfo    = _ => { };
+    internal static Action<string> LogWarning = _ => { };
+    internal static Action<string> LogDebug   = _ => { };
+
+    internal LobbyManager(IPhotonBridge bridge)
     {
-        _controller = controller;
+        _bridge = bridge;
         Config = ConfigStore.Load();
-        _controller.add_OnPlayerEnteredRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerEntered));
-        _controller.add_OnPlayerLeftRoomEvent(new System.Action<NetworkPlayer>(HandlePlayerLeft));
-        _controller.add_OnPlayerPropertiesChangedEvent(
-            new System.Action<NetworkPlayer, Il2CppSystem.Collections.Generic.Dictionary<string, Il2CppSystem.Object>>(
-                (p, _) => HandlePlayerPropertiesUpdate(p)));
-        Plugin.Log.LogInfo($"LobbyManager ready - home lobby: {Config.LobbyRoomName}");
+        _bridge.PlayerEntered += HandlePlayerEntered;
+        _bridge.PlayerLeft += HandlePlayerLeft;
+        _bridge.PlayerPropertiesChanged += HandlePlayerPropertiesUpdate;
+        LogInfo($"LobbyManager ready - home lobby: {Config.LobbyRoomName}");
     }
 
-    public static void Initialize(IMultiplayerController controller)
+    public static void Initialize(IPhotonBridge bridge)
     {
-        Instance = new LobbyManager(controller);
+        Instance = new LobbyManager(bridge);
         var steamId = SteamInviter.GetLocalSteamId();
         if (steamId != 0)
         {
             Instance._localSteamId = steamId;
             Instance.Config.LobbyRoomName = ConfigStore.GetOrCreateRoomName(steamId);
         }
-        Plugin.Log.LogInfo($"LobbyManager initialized - room: {Instance.Config.LobbyRoomName}");
+        LogInfo($"LobbyManager initialized - room: {Instance.Config.LobbyRoomName}");
 
         // Apply cold-launch +connect arg if one was captured during Plugin.Load()
         if (Plugin.Instance?._pendingConnectArg is string pending)
@@ -119,12 +122,12 @@ public class LobbyManager
     {
         if (string.IsNullOrEmpty(Config.LobbyRoomName))
         {
-            Plugin.Log.LogWarning("Home lobby room name not set - cannot rejoin");
+            LogWarning("Home lobby room name not set - cannot rejoin");
             return;
         }
-        Plugin.Log.LogInfo($"Attempting to join room: {Config.LobbyRoomName}");
+        LogInfo($"Attempting to join room: {Config.LobbyRoomName}");
         _joinOrCreatePending = true;
-        _controller.JoinRoom(Config.LobbyRoomName);
+        _bridge.JoinRoom(Config.LobbyRoomName);
     }
 
     public void AddFriend(FriendEntry friend)
@@ -143,7 +146,7 @@ public class LobbyManager
     {
         Config.LobbyRoomName = newName;
         ConfigStore.Save(Config);
-        Plugin.Log.LogInfo($"Room name updated to: {newName}");
+        LogInfo($"Room name updated to: {newName}");
     }
 
     /// <summary>
@@ -166,7 +169,7 @@ public class LobbyManager
     {
         if (!IsValidRoomName(roomName))
         {
-            Plugin.Log.LogWarning($"JoinSpecificRoom: rejected invalid room name (length={roomName?.Length})");
+            LogWarning($"JoinSpecificRoom: rejected invalid room name (length={roomName?.Length})");
             return;
         }
         UpdateRoomName(roomName);
@@ -180,7 +183,7 @@ public class LobbyManager
     {
         if (!IsValidRoomName(roomName))
         {
-            Plugin.Log.LogWarning($"JoinRoomByInvite: rejected invalid room name (length={roomName?.Length})");
+            LogWarning($"JoinRoomByInvite: rejected invalid room name (length={roomName?.Length})");
             return;
         }
         // Guard against a second invite arriving before the first join completes.
@@ -189,10 +192,10 @@ public class LobbyManager
         // home lobby name on restore. Reject the second invite to preserve the first.
         if (_preInviteRoomName != null)
         {
-            Plugin.Log.LogWarning($"JoinRoomByInvite: invite join already pending, ignoring {roomName}");
+            LogWarning($"JoinRoomByInvite: invite join already pending, ignoring {roomName}");
             return;
         }
-        Plugin.Log.LogInfo($"Invite join: {roomName} (home lobby will be restored after join)");
+        LogInfo($"Invite join: {roomName} (home lobby will be restored after join)");
         _preInviteRoomName = Config.LobbyRoomName;
         Config.LobbyRoomName = roomName; // in-memory only — no ConfigStore.Save
         JoinOrCreateHomeLobby();
@@ -202,7 +205,7 @@ public class LobbyManager
 
     internal void HandleCreatedRoom()
     {
-        var name = _controller.GetRoomName() ?? string.Empty;
+        var name = _bridge.GetRoomName() ?? string.Empty;
         if (_preInviteRoomName != null)
         {
             // Invite join created the room (host not there yet) — restore own lobby name
@@ -218,17 +221,17 @@ public class LobbyManager
         _joinOrCreatePending = false;
         _inGame = false;
         _inHomeLobby = true;
-        _controller.AllowKickPlayers(true);
+        _bridge.AllowKickPlayers(true);
         RefreshRoomPlayers();
-        Plugin.Log.LogInfo($"Room created: {name}");
+        LogInfo($"Room created: {name}");
     }
 
     internal void HandleJoinedRoom()
     {
-        var roomName = _controller.GetRoomName() ?? string.Empty;
+        var roomName = _bridge.GetRoomName() ?? string.Empty;
         if (roomName != Config.LobbyRoomName)
         {
-            Plugin.Log.LogDebug($"OnJoinedRoom: game room '{roomName}'");
+            LogDebug($"OnJoinedRoom: game room '{roomName}'");
             _joinOrCreatePending = false;
             _inGame = true;
             PendingRejoin = false; // clear post-game state — we're in a new game room
@@ -243,11 +246,11 @@ public class LobbyManager
         AutoQueueActive = false;
         RejoinConfirmed?.Invoke();
         RefreshRoomPlayers();
-        PhotonPropertyHelper.SetLocalVersion(Plugin.PluginVersion);
+        _bridge.SetLocalVersion(Plugin.PluginVersion);
         RebuildVersionMap();
         if (roomName != _lastLoggedRoom)
         {
-            Plugin.Log.LogInfo($"Joined room: {roomName}");
+            LogInfo($"Joined room: {roomName}");
             _lastLoggedRoom = roomName;
         }
         if (_preInviteRoomName != null)
@@ -273,7 +276,7 @@ public class LobbyManager
             {
                 // Player explicitly clicked Leave mid-game — skip post-game prompt, go straight home
                 _leavingToHomeLobby = false;
-                Plugin.Log.LogInfo("Mid-game leave: rejoining home lobby directly");
+                LogInfo("Mid-game leave: rejoining home lobby directly");
                 JoinOrCreateHomeLobby();
                 return;
             }
@@ -281,7 +284,7 @@ public class LobbyManager
             // Game ended normally — show post-game prompt; countdown only starts if Play Again is clicked
             PendingRejoin = true;
             RejoinAvailable?.Invoke();
-            Plugin.Log.LogInfo("Game ended - showing post-game prompt");
+            LogInfo("Game ended - showing post-game prompt");
             return;
         }
 
@@ -305,39 +308,36 @@ public class LobbyManager
             // if another left-room event fires during the rejoin attempt, the recreate
             // path is not re-entered (which would trigger an infinite recreate loop).
             _recreatingHomeLobby = false;
-            Plugin.Log.LogInfo("Recreate: rejoining home lobby");
+            LogInfo("Recreate: rejoining home lobby");
             JoinOrCreateHomeLobby();
             return;
         }
 
         if (_preInviteRoomName != null)
         {
-            Plugin.Log.LogInfo("Left room for invite join - auto-queue suppressed");
+            LogInfo("Left room for invite join - auto-queue suppressed");
             return;
         }
 
-        Plugin.Log.LogInfo("Left home lobby - game starting");
+        LogInfo("Left home lobby - game starting");
     }
 
-    private void HandlePlayerEntered(NetworkPlayer player)
+    private void HandlePlayerEntered(PlayerInfo player)
     {
         if (!_inHomeLobby || player == null) return;
-        var uid = player.UserId;
-        if (!string.IsNullOrEmpty(uid))
+        if (!string.IsNullOrEmpty(player.UserId))
         {
-            _roomSteamIds.Add(uid);
+            _roomSteamIds.Add(player.UserId);
             PlayerListChanged?.Invoke();
-            // New player may already have their version property set
-            var ver = PhotonPropertyHelper.ReadPeerVersion(player);
-            if (ver != null)
+            if (player.Version != null)
             {
-                _peerVersions[uid] = ver;
+                _peerVersions[player.UserId] = player.Version;
                 VersionMapChanged?.Invoke();
             }
         }
     }
 
-    private void HandlePlayerLeft(NetworkPlayer player)
+    private void HandlePlayerLeft(PlayerInfo player)
     {
         if (!_inHomeLobby || player == null) return;
         var uid = player.UserId ?? "";
@@ -350,59 +350,37 @@ public class LobbyManager
     private void RefreshRoomPlayers()
     {
         _roomSteamIds.Clear();
-        Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<NetworkPlayer> players;
-        try { players = _controller.GetRoomPlayers(); }
-        catch (System.Exception ex)
-        {
-            Plugin.Log.LogWarning($"[LobbyManager] GetRoomPlayers threw (room not ready yet): {ex.Message}");
-            PlayerListChanged?.Invoke();
-            return;
-        }
-        if (players != null)
-            foreach (var p in players)
-                if (p != null && !string.IsNullOrEmpty(p.UserId))
-                    _roomSteamIds.Add(p.UserId);
+        var players = _bridge.GetRoomPlayers();
+        foreach (var p in players)
+            if (!string.IsNullOrEmpty(p.UserId))
+                _roomSteamIds.Add(p.UserId);
         PlayerListChanged?.Invoke();
     }
 
     private void RebuildVersionMap()
     {
         _peerVersions.Clear();
-        Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<NetworkPlayer> players;
-        try { players = _controller.GetRoomPlayers(); }
-        catch (System.Exception ex)
-        {
-            Plugin.Log.LogWarning($"[LobbyManager] GetRoomPlayers threw in RebuildVersionMap: {ex.Message}");
-            VersionMapChanged?.Invoke();
-            return;
-        }
-        if (players == null)
-        {
-            VersionMapChanged?.Invoke();
-            return;
-        }
+        var players = _bridge.GetRoomPlayers();
         foreach (var p in players)
         {
-            if (p == null || string.IsNullOrEmpty(p.UserId)) continue;
-            var ver = PhotonPropertyHelper.ReadPeerVersion(p);
-            if (ver != null)
-                _peerVersions[p.UserId] = ver;
+            if (string.IsNullOrEmpty(p.UserId)) continue;
+            if (p.Version != null)
+                _peerVersions[p.UserId] = p.Version;
         }
         VersionMapChanged?.Invoke();
-        Plugin.Log.LogInfo(
+        LogInfo(
             $"[LobbyManager] Version map rebuilt: {_peerVersions.Count} modded peer(s), drift={HasVersionDrift}");
     }
 
-    internal void HandlePlayerPropertiesUpdate(NetworkPlayer player)
+    internal void HandlePlayerPropertiesUpdate(PlayerInfo player)
     {
         if (player == null || string.IsNullOrEmpty(player.UserId)) return;
-        var ver = PhotonPropertyHelper.ReadPeerVersion(player);
-        if (ver != null)
+        if (player.Version != null)
         {
-            _peerVersions[player.UserId] = ver;
+            _peerVersions[player.UserId] = player.Version;
             VersionMapChanged?.Invoke();
-            Plugin.Log.LogInfo(
-                $"[LobbyManager] Player {player.UserId} updated ekmod_ver to {ver}");
+            LogInfo(
+                $"[LobbyManager] Player {player.UserId} updated ekmod_ver to {player.Version}");
         }
     }
 
@@ -413,8 +391,8 @@ public class LobbyManager
         PendingRejoin = false;
         AutoQueueActive = false;
         RejoinConfirmed?.Invoke(); // clears post-game UI silently (no countdown)
-        _controller.JoinRandomRoom();
-        Plugin.Log.LogInfo("Play Again: queueing for matchmaking");
+        _bridge.JoinRandomRoom();
+        LogInfo("Play Again: queueing for matchmaking");
     }
 
     // Leaves the home lobby and immediately recreates it (fresh room, same name).
@@ -422,8 +400,8 @@ public class LobbyManager
     public void RecreateHomeLobby()
     {
         _recreatingHomeLobby = true;
-        _controller.LeaveRoom();
-        Plugin.Log.LogInfo("Recreating home lobby");
+        _bridge.LeaveRoom();
+        LogInfo("Recreating home lobby");
     }
 
     // Called when the player clicks "Leave" in the overlay (mid-game or post-game).
@@ -437,7 +415,7 @@ public class LobbyManager
         {
             // Mid-game: leave game room first; HandleLeftRoom will then call JoinOrCreateHomeLobby
             _leavingToHomeLobby = true;
-            _controller.LeaveRoom();
+            _bridge.LeaveRoom();
         }
         else
         {
@@ -449,9 +427,9 @@ public class LobbyManager
 
     public void KickPlayer(string steam64Id)
     {
-        _controller.AllowKickPlayers(true);
-        _controller.KickPlayer(steam64Id);
-        Plugin.Log.LogDebug($"Kicked player (Steam64 ID redacted from LogInfo)");
+        _bridge.AllowKickPlayers(true);
+        _bridge.KickPlayer(steam64Id);
+        LogDebug($"Kicked player (Steam64 ID redacted from LogInfo)");
     }
 
     internal void HandleJoinRoomFailed(short returnCode, string message)
@@ -462,10 +440,8 @@ public class LobbyManager
         _joinOrCreatePending = false;
 
         // Room not found (Photon code 32758) or similar — create it instead
-        Plugin.Log.LogInfo($"JoinRoom failed ({returnCode}): {message} - creating room");
-        // ctor: publishUserId, isOpen, isVisible, maxPlayers, playerTtl, emptyRoomTtl
-        var opts = new NetworkRoomOptions(false, true, false, 5, 60000, 0);
-        _controller.CreateRoom(Config.LobbyRoomName, opts, null);
+        LogInfo($"JoinRoom failed ({returnCode}): {message} - creating room");
+        _bridge.CreateRoom(Config.LobbyRoomName);
     }
 
     // ── Harmony patches ────────────────────────────────────────────────────────

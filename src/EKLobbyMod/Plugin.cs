@@ -28,6 +28,9 @@ public class Plugin : BasePlugin
     {
         Log = base.Log;
         Instance = this;
+        LobbyManager.LogInfo    = msg => Log.LogInfo(msg);
+        LobbyManager.LogWarning = msg => Log.LogWarning(msg);
+        LobbyManager.LogDebug   = msg => Log.LogDebug(msg);
         Log.LogInfo($"{PluginName} v{PluginVersion} loaded");
         ClassInjector.RegisterTypeInIl2Cpp<OverlayPanel>();
         ClassInjector.RegisterTypeInIl2Cpp<FriendPickerPopup>();

@@ -20,7 +20,7 @@ public static class PhotonClientFinder
             Plugin.Log.LogInfo($"IMultiplayerController captured: {Controller?.GetType()?.Name ?? "null"}");
 
             if (LobbyManager.Instance == null && Controller != null)
-                LobbyManager.Initialize(Controller);
+                LobbyManager.Initialize(new PhotonControllerBridge(Controller));
         }
     }
 }
