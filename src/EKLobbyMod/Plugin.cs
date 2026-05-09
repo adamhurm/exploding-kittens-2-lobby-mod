@@ -31,7 +31,9 @@ public class Plugin : BasePlugin
         Log.LogInfo($"{PluginName} v{PluginVersion} loaded");
         ClassInjector.RegisterTypeInIl2Cpp<OverlayPanel>();
         ClassInjector.RegisterTypeInIl2Cpp<FriendPickerPopup>();
-        new Harmony(PluginGuid).PatchAll();
+        var harmony = new Harmony(PluginGuid);
+        harmony.PatchAll();
+        SteamJoinPatch.TryApply(harmony);
         SceneManager.sceneLoaded += new System.Action<Scene, LoadSceneMode>(OnSceneLoaded);
 
         // Cold-launch: Steam may pass the room code as a command-line arg

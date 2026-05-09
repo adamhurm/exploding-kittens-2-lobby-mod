@@ -5,36 +5,54 @@ using System.Reflection;
 
 namespace EKLobbyMod;
 
-// Harmony-patches SteamManager._OnRichPresenceJoinRequested to intercept Steam overlay
-// join requests. Callback<GameRichPresenceJoinRequested_t>.Create() cannot be used because
-// the struct is non-blittable under IL2CppInterop (m_rgchConnect is a string property).
-[HarmonyPatch]
+// Applied manually (not via PatchAll) so a null result doesn't crash the plugin.
+// Patches the game's SteamManager._OnRichPresenceJoinRequested to intercept Steam
+// overlay join requests. Callback<GameRichPresenceJoinRequested_t>.Create() cannot
+// be used because the struct is non-blittable under IL2CppInterop.
 static class SteamJoinPatch
 {
-    static MethodBase? TargetMethod()
+    internal static void TryApply(Harmony harmony)
     {
+        MethodBase? method = null;
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             Type[] types;
             try { types = asm.GetTypes(); }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = Array.FindAll(ex.Types, t => t != null);
-            }
+            catch (ReflectionTypeLoadException ex) { types = Array.FindAll(ex.Types!, t => t != null); }
             catch { continue; }
 
             foreach (var type in types)
             {
-                if (type == null || type.Name != "SteamManager") continue;
-                var method = type.GetMethod("_OnRichPresenceJoinRequested",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                if (method == null) continue;
-                Plugin.Log.LogInfo($"[SteamJoinPatch] Target: {type.FullName}.{method.Name}");
-                return method;
+                if (type == null) continue;
+                try
+                {
+                    var m = type.GetMethod("_OnRichPresenceJoinRequested",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (m == null) continue;
+                    Plugin.Log.LogInfo($"[SteamJoinPatch] Found: {type.FullName}.{m.Name}");
+                    method = m;
+                }
+                catch { }
+                if (method != null) break;
             }
+            if (method != null) break;
         }
-        Plugin.Log.LogWarning("[SteamJoinPatch] SteamManager._OnRichPresenceJoinRequested not found; Steam overlay joins unavailable");
-        return null;
+
+        if (method == null)
+        {
+            Plugin.Log.LogWarning("[SteamJoinPatch] _OnRichPresenceJoinRequested not found; Steam overlay joins unavailable");
+            return;
+        }
+
+        try
+        {
+            harmony.Patch(method, postfix: new HarmonyMethod(typeof(SteamJoinPatch), nameof(Postfix)));
+            Plugin.Log.LogInfo("[SteamJoinPatch] Patch applied successfully");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.LogWarning($"[SteamJoinPatch] Patch failed ({ex.GetType().Name}): {ex.Message}");
+        }
     }
 
     static void Postfix(GameRichPresenceJoinRequested_t param)
