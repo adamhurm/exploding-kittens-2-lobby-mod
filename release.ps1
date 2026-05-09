@@ -10,7 +10,8 @@ $ErrorActionPreference = 'Stop'
 $files = @(
     "src\EKLobbyMod\Plugin.cs",
     "docs\index.html",
-    "hosting\ek.bring-us.com\public\index.html"
+    "hosting\ek.bring-us.com\public\index.html",
+    "hosting\ek.bring-us.com\public\get"
 )
 
 # Detect current version from Plugin.cs
