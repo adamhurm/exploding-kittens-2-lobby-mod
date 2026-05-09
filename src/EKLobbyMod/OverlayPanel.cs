@@ -1,4 +1,5 @@
 using EKLobbyShared;
+using Il2CppInterop.Runtime.Attributes;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -651,6 +652,7 @@ public class OverlayPanel : MonoBehaviour
     private void OpenFriendPicker() =>
         FriendPickerPopup.Open(_manager, transform.parent, RefreshFriendList);
 
+    [HideFromIl2Cpp]
     private System.Collections.IEnumerator RunCountdown()
     {
         for (int i = 15; i >= 1; i--)
