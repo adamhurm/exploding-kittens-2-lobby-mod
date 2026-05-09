@@ -625,6 +625,7 @@ public class OverlayPanel : MonoBehaviour
 
     private void RefreshBottomRow()
     {
+        if (_manager == null) return;
         bool inGame = _manager.InGame;
         bool inHomeLobby = _manager.InHomeLobby;
         bool postGame = !inGame && _manager.PendingRejoin;
