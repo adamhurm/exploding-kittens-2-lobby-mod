@@ -13,7 +13,7 @@ public class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.eklobbymod.plugin";
     public const string PluginName = "EKLobbyMod";
-    public const string PluginVersion = "1.1.7";
+    public const string PluginVersion = "1.1.8";
     public const string ReleasesUrl   = "https://github.com/adamhurm/exploding-kittens-2-lobby-mod/releases";
 
     // 'new' shadows BasePlugin.Log (instance) with a static field accessible by other classes
