@@ -12,6 +12,7 @@ public sealed class PhotonControllerBridge : IPhotonBridge
     public event Action<PlayerInfo> PlayerEntered;
     public event Action<PlayerInfo> PlayerLeft;
     public event Action<PlayerInfo> PlayerPropertiesChanged;
+    public event Action RoomPropertiesChanged;
 
     public PhotonControllerBridge(IMultiplayerController controller)
     {
@@ -24,6 +25,9 @@ public sealed class PhotonControllerBridge : IPhotonBridge
             new System.Action<NetworkPlayer, Il2CppSystem.Collections.Generic.Dictionary<string, Il2CppSystem.Object>>(
                 (p, _) => PlayerPropertiesChanged?.Invoke(
                     new PlayerInfo(p?.UserId ?? "", PhotonPropertyHelper.ReadPeerVersion(p)))));
+        _controller.add_OnRoomPropertiesChangedEvent(
+            new System.Action<NetworkRoom, Il2CppSystem.Collections.Generic.Dictionary<string, Il2CppSystem.Object>>(
+                (_, _) => RoomPropertiesChanged?.Invoke()));
     }
 
     public void JoinRoom(string roomName) => _controller.JoinRoom(roomName);
@@ -39,6 +43,7 @@ public sealed class PhotonControllerBridge : IPhotonBridge
     public void KickPlayer(string userId) => _controller.KickPlayer(userId);
     public void SetLocalVersion(string version) => PhotonPropertyHelper.SetLocalVersion(version);
     public void ClearPartyGameRoom() => PhotonPropertyHelper.ClearRoomGameProperty();
+    public string GetRoomProperty(string key) => PhotonPropertyHelper.GetRoomProperty(key);
 
     public IReadOnlyList<PlayerInfo> GetRoomPlayers()
     {

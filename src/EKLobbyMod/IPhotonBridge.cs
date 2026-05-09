@@ -17,10 +17,12 @@ public interface IPhotonBridge
     void ClearPartyGameRoom();
 
     string GetRoomName();
+    string GetRoomProperty(string key);
     IReadOnlyList<PlayerInfo> GetRoomPlayers();
     bool IsMasterClient();
 
     event Action<PlayerInfo> PlayerEntered;
     event Action<PlayerInfo> PlayerLeft;
     event Action<PlayerInfo> PlayerPropertiesChanged;
+    event Action RoomPropertiesChanged;
 }

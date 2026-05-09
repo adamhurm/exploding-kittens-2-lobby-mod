@@ -23,7 +23,6 @@ public static class PhotonClientFinder
                 LobbyManager.Initialize(new PhotonControllerBridge(Controller));
 
             PartyGamePatch.TryApply(Plugin.HarmonyInstance, Controller);
-            RoomPropertiesPatch.TryApply(Plugin.HarmonyInstance);
         }
     }
 }

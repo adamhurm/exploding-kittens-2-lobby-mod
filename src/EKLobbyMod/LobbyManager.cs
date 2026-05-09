@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using EKLobbyShared;
-using ExitGames.Client.Photon;
 using HarmonyLib;
 using MGS.Network.Photon;
 
@@ -100,6 +99,7 @@ public class LobbyManager
         _bridge.PlayerEntered += HandlePlayerEntered;
         _bridge.PlayerLeft += HandlePlayerLeft;
         _bridge.PlayerPropertiesChanged += HandlePlayerPropertiesUpdate;
+        _bridge.RoomPropertiesChanged += HandleRoomPropertiesUpdated;
         LogInfo($"LobbyManager ready - home lobby: {Config.LobbyRoomName}");
     }
 
@@ -461,12 +461,11 @@ public class LobbyManager
         LogInfo($"[Party] Routing game to {gameRoomName} - notifying party via room property");
     }
 
-    internal void HandleRoomPropertiesUpdated(Hashtable props)
+    internal void HandleRoomPropertiesUpdated()
     {
         if (_partyGameInitiatedByMe) { _partyGameInitiatedByMe = false; return; }
-        if (!_inHomeLobby || props == null) return;
-        if (!props.ContainsKey(PhotonPropertyHelper.PartyGameKey)) return;
-        var gameRoom = props[PhotonPropertyHelper.PartyGameKey]?.ToString();
+        if (!_inHomeLobby) return;
+        var gameRoom = _bridge.GetRoomProperty(PhotonPropertyHelper.PartyGameKey);
         if (!IsValidRoomName(gameRoom)) return;
         LogInfo($"[Party] Leader started game in {gameRoom} - auto-joining");
         _bridge.JoinRoom(gameRoom);

@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
-using ExitGames.Client.Photon;
 using HarmonyLib;
 using MGS.Network;
 
@@ -71,62 +69,4 @@ static class PartyGamePatch
             Plugin.Log.LogWarning($"[PartyGamePatch] Prefix error: {ex.Message}");
         }
     }
-}
-
-// Searches all assemblies at runtime for OnRoomPropertiesUpdated since the declaring
-// class is not statically known (PhotonMatchMakingHandler doesn't have it).
-static class RoomPropertiesPatch
-{
-    internal static void TryApply(Harmony harmony)
-    {
-        var candidates = new List<MethodBase>();
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Type[] types;
-            try { types = asm.GetTypes(); }
-            catch (ReflectionTypeLoadException ex) { types = Array.FindAll(ex.Types!, t => t != null); }
-            catch { continue; }
-
-            foreach (var type in types)
-            {
-                if (type == null) continue;
-                try
-                {
-                    var m = type.GetMethod("OnRoomPropertiesUpdate",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                        | BindingFlags.DeclaredOnly);
-                    if (m == null || m.IsAbstract) continue;
-                    var parms = m.GetParameters();
-                    if (parms.Length == 1 && parms[0].ParameterType.Name.Contains("Hashtable"))
-                    {
-                        Plugin.Log.LogInfo($"[RoomPropertiesPatch] Candidate: {type.FullName}");
-                        candidates.Add(m);
-                    }
-                }
-                catch { }
-            }
-        }
-
-        if (candidates.Count == 0)
-        {
-            Plugin.Log.LogWarning("[RoomPropertiesPatch] OnRoomPropertiesUpdate not found; party property updates unavailable");
-            return;
-        }
-
-        foreach (var method in candidates)
-        {
-            try
-            {
-                harmony.Patch(method, postfix: new HarmonyMethod(typeof(RoomPropertiesPatch), nameof(Postfix)));
-                Plugin.Log.LogInfo($"[RoomPropertiesPatch] Patched {method.DeclaringType?.Name}.OnRoomPropertiesUpdate");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogWarning($"[RoomPropertiesPatch] Patch failed on {method.DeclaringType?.Name}.OnRoomPropertiesUpdate: {ex.Message}");
-            }
-        }
-    }
-
-    static void Postfix(Hashtable propertiesThatChanged) =>
-        LobbyManager.Instance?.HandleRoomPropertiesUpdated(propertiesThatChanged);
 }

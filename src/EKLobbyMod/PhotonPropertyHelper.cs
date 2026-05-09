@@ -46,6 +46,17 @@ public static class PhotonPropertyHelper
         }
     }
 
+    internal static string GetRoomProperty(string key)
+    {
+        try
+        {
+            var props = Photon.Pun.PhotonNetwork.CurrentRoom?.CustomProperties;
+            if (props == null || !props.ContainsKey(key)) return null;
+            return props[key]?.ToString();
+        }
+        catch { return null; }
+    }
+
     internal static void ClearRoomGameProperty()
     {
         try
