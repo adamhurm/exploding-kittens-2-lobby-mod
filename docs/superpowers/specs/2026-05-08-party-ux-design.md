@@ -10,9 +10,9 @@
 Two overlay UX improvements for EKLobbyMod targeting the post-game and minimized-state
 experiences:
 
-1. **Auto-queue countdown** — after a game ends, the overlay counts down 5→0 and
-   automatically rejoins the home lobby. The player can cancel by clicking the game's
-   native red Leave button.
+1. **Auto-queue countdown** — after a game ends, the overlay counts down 15→0 and
+   automatically rejoins the home lobby. The player can cancel by clicking the LEAVE
+   button shown directly on the countdown overlay.
 
 2. **Party indicator** — the minimized tab shows "X in party" with a colored presence dot
    so the player can see room occupancy without opening the overlay.
@@ -64,44 +64,24 @@ beyond the existing two.
 
 ### Leave detection design
 
-**Decision: flag + `OnLeftRoom` + `OnJoinedRoom` sequencing.**
+The LEAVE button is placed **inside the countdown overlay** so it remains reachable while
+the semi-opaque overlay blocks the rest of the panel. Clicking it calls
+`LobbyManager.LeaveToHomeLobby()`, which clears `AutoQueueActive`, fires `AutoQueueCancelled`
+(stopping the coroutine), and either leaves the game room (mid-game) or rejoins the home
+lobby directly (post-game).
 
-The game's native Leave button triggers `PhotonMatchMakingHandler.OnLeftRoom` just like a
-natural game-end. There is no clean pre-leave hook available without inspecting the
-`MGS.Network` assembly for a "LeaveRoom" call — that inspection is out of scope here.
+The hint text "Click Leave to cancel" displayed below the countdown digit refers to this
+on-overlay button.
 
-Instead, the design distinguishes between two `OnLeftRoom` scenarios:
+**Why not expose the bottom-row LEAVE button:** The countdown overlay covers the full
+300×356px interior below the header (intentional modal behaviour). Shrinking it to expose
+the bottom row would leave an awkward partial-frame effect. Owning the cancel action inside
+the modal is cleaner UX.
 
-| Scenario | How it presents |
-|---|---|
-| Game ended naturally | `OnLeftRoom` fires while `PendingRejoin` is `false` (first leave after a joined room) |
-| Explicit leave during countdown | `OnLeftRoom` fires while `AutoQueueActive` is `true` (countdown was running) |
-
-When `OnLeftRoom` fires while `AutoQueueActive` is already `true`, that means the player
-joined a room, a countdown started, and now `OnLeftRoom` fired again — this is the explicit
-leave. The overlay cancels the countdown.
-
-**Why this works cleanly:** `OnJoinedRoom` clears `AutoQueueActive`. So the sequence is:
-
-```
-Game session ends → OnLeftRoom (first) → countdown starts (AutoQueueActive = true)
-                 → OnJoinedRoom → AutoQueueActive = false (back to home lobby)
-
-Player leaves mid-countdown → OnLeftRoom (second, AutoQueueActive still true) → cancel
-```
-
-**Known gap:** If the player completes a game, declines to rejoin (countdown expires without
-auto-fire), and then leaves a second game naturally, the second `OnLeftRoom` would not be
-ambiguous because `AutoQueueActive` was already reset to `false` when the countdown expired
-or when `OnJoinedRoom` fired. This gap does not apply in practice because the countdown
-either fires `JoinOrCreateHomeLobby` (→ `OnJoinedRoom` → reset) or is explicitly cancelled
-(reset). The only edge case is if the player somehow leaves two rooms in rapid succession
-with no join in between — acceptable for a private friends-only lobby scenario.
-
-**Simpler alternative considered and rejected:** A dedicated Harmony pre-patch on a
-`LeaveRoom()` call. This would require finding the correct `MGS.Network` method name, which
-needs additional IL2CPP inspection. Deferring this to a follow-up if the flag approach
-proves unreliable.
+**Previous `OnLeftRoom` sequencing approach (superseded):** The original design detected an
+explicit leave via a second `OnLeftRoom` event while `AutoQueueActive` was true. This is no
+longer needed — `LeaveToHomeLobby()` cancels the countdown synchronously before any room
+leave occurs.
 
 ### LobbyManager changes
 
@@ -160,105 +140,52 @@ public event System.Action AutoQueueCancelled;
 
 ### OverlayPanel changes
 
-New fields:
+The countdown is rendered as a full-panel semi-opaque overlay (`_countdownOverlay`, 300×356px)
+containing three child elements:
 
-```csharp
-private Text _countdownLabel = null!;
-private Coroutine _countdownCoroutine;
-```
+| Element | Content | Position (from overlay center) |
+|---|---|---|
+| `_countdownDigit` (`Text`) | Large digit 15→1, EkRed bold 64pt | `(0, +40s)` |
+| `_countdownHint` (`Text`) | "Click Leave to cancel" | `(0, -20s)` |
+| `Btn_Leave_Countdown` (`Button`) | "LEAVE", EkRedDark, 130×32px | `(0, -70s)` |
 
-`_countdownLabel` is built in `BuildExpandedPanel()` near `_rejoinPromptLabel`, same
-vertical position (they swap visibility — prompt shown during countdown, hidden after):
+The LEAVE button inside the overlay calls `DoLeave()` (same as the bottom-row LEAVE).
 
-```
-Position: new Vector2(6 * s, 26 * s), size: new Vector2(200 * s, 18 * s)
-Font size: (int)(12 * s)
-Color: EkOffWhite
-Initially hidden
-```
-
-`ShowRejoinPrompt()` is updated:
+`ShowRejoinPrompt()` activates the overlay and starts the coroutine:
 
 ```csharp
 public void ShowRejoinPrompt()
 {
     SetExpanded(true);
     _rejoinPromptLabel.gameObject.SetActive(true);
-    _rejoinBtnImage.color = new Color(0.12f, 0.48f, 0.12f, 1f);
-
+    RefreshBottomRow();
     if (_manager.AutoQueueActive)
     {
         if (_countdownCoroutine != null) StopCoroutine(_countdownCoroutine);
-        _countdownCoroutine = StartCoroutine(RunCountdown());
+        _countdownOverlay.SetActive(true);
+        _countdownDigit.text = "15";
+        _countdownCoroutine = StartCoroutine("RunCountdown");
     }
 }
 ```
 
-Countdown coroutine:
+Coroutine counts 15→1, then fires `JoinOrCreateHomeLobby()`. It exits early if
+`AutoQueueActive` is cleared externally.
 
-```csharp
-private System.Collections.IEnumerator RunCountdown()
-{
-    for (int i = 5; i >= 1; i--)
-    {
-        _countdownLabel.gameObject.SetActive(true);
-        _countdownLabel.text = $"Rejoining in {i}…";
-        yield return new WaitForSeconds(1f);
+`HideRejoinPrompt()` (on `RejoinConfirmed`) and `OnAutoQueueCancelled()` (on
+`AutoQueueCancelled`) both stop the coroutine and deactivate `_countdownOverlay`.
 
-        if (!_manager.AutoQueueActive)   // cancelled externally
-        {
-            _countdownLabel.gameObject.SetActive(false);
-            yield break;
-        }
-    }
-    _countdownLabel.gameObject.SetActive(false);
-    _manager.JoinOrCreateHomeLobby();
-}
-```
+### Bottom-row button states
 
-`HideRejoinPrompt()` (called on `RejoinConfirmed`) also cleans up:
+| State | Left | Right |
+|---|---|---|
+| Home lobby (`InHomeLobby`) | INVITE ALL | RECREATE |
+| In-game (`InGame`) | INVITE ALL | LEAVE |
+| Post-game (`PendingRejoin`) | PLAY AGAIN | LEAVE |
+| Not in any room | INVITE ALL | REJOIN |
 
-```csharp
-public void HideRejoinPrompt()
-{
-    if (_countdownCoroutine != null)
-    {
-        StopCoroutine(_countdownCoroutine);
-        _countdownCoroutine = null;
-    }
-    _countdownLabel.gameObject.SetActive(false);
-    _rejoinPromptLabel.gameObject.SetActive(false);
-    _rejoinBtnImage.color = EkDark;
-}
-```
-
-Wire `AutoQueueCancelled` in `Inject()`:
-
-```csharp
-manager.AutoQueueCancelled += (System.Action)panel.OnAutoQueueCancelled;
-```
-
-`OnAutoQueueCancelled` in `OverlayPanel`:
-
-```csharp
-public void OnAutoQueueCancelled()
-{
-    if (_countdownCoroutine != null)
-    {
-        StopCoroutine(_countdownCoroutine);
-        _countdownCoroutine = null;
-    }
-    _countdownLabel.gameObject.SetActive(false);
-    _rejoinPromptLabel.gameObject.SetActive(false);
-    _rejoinBtnImage.color = EkDark;
-    // Stay expanded (user explicitly left — show idle state)
-}
-```
-
-### Immediate Rejoin (REJOIN button clicked during countdown)
-
-`DoRejoin()` already calls `_manager.JoinOrCreateHomeLobby()`. No change needed. The
-coroutine is cleaned up by `HideRejoinPrompt()` which fires on `RejoinConfirmed`.
+RECREATE leaves the current Photon room and immediately recreates it with the same name.
+REJOIN is only shown in the rare "not in any room" state (e.g. after a disconnect).
 
 ---
 

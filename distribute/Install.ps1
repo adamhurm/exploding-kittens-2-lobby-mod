@@ -6,8 +6,9 @@
   If Windows blocks this script, double-click RunInstall.bat instead,
   or run: powershell -ExecutionPolicy Bypass -File Install.ps1
 #>
+param([switch]$NonInteractive)
 
-$BepInExUrl = "https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
+$BepInExUrl ="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
 $ModName    = "EKLobbyMod"
 $GameFolder = "Exploding Kittens 2"
 $PluginFiles = @("EKLobbyMod.dll", "EKLobbyShared.dll")
@@ -77,7 +78,7 @@ if ($missing.Count -gt 0) {
     Write-Fail "Package is incomplete. Missing files:"
     $missing | ForEach-Object { Write-Fail "  $_" }
     Write-Warn "Re-download and re-extract the mod package, then try again."
-    Read-Host "`nPress Enter to exit"
+    if (-not $NonInteractive) { Read-Host "`nPress Enter to exit" }
     exit 1
 }
 Write-Ok "Package OK."
@@ -95,7 +96,7 @@ if (-not $gamePath) {
     $input = (Read-Host).Trim().Trim('"')
     if (-not $input -or -not (Test-Path $input)) {
         Write-Fail "Invalid path. Exiting."
-        Read-Host "`nPress Enter to exit"
+        if (-not $NonInteractive) { Read-Host "`nPress Enter to exit" }
         exit 1
     }
     $gamePath = $input
@@ -111,7 +112,7 @@ if (-not (Test-Path (Join-Path $gamePath "BepInEx\core"))) {
     $doInstall = (Read-Host).Trim().ToUpper()
     if ($doInstall -eq "N") {
         Write-Warn "BepInEx is required. Exiting."
-        Read-Host "`nPress Enter to exit"
+        if (-not $NonInteractive) { Read-Host "`nPress Enter to exit" }
         exit 1
     }
 
@@ -122,7 +123,7 @@ if (-not (Test-Path (Join-Path $gamePath "BepInEx\core"))) {
         (New-Object Net.WebClient).DownloadFile($BepInExUrl, $tmpZip)
     } catch {
         Write-Fail "Download failed: $_"
-        Read-Host "`nPress Enter to exit"
+        if (-not $NonInteractive) { Read-Host "`nPress Enter to exit" }
         exit 1
     }
     Write-Ok "Downloaded."
@@ -132,7 +133,7 @@ if (-not (Test-Path (Join-Path $gamePath "BepInEx\core"))) {
         Expand-Archive -Path $tmpZip -DestinationPath $gamePath -Force
     } catch {
         Write-Fail "Extraction failed: $_"
-        Read-Host "`nPress Enter to exit"
+        if (-not $NonInteractive) { Read-Host "`nPress Enter to exit" }
         exit 1
     }
     Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
@@ -172,4 +173,4 @@ Write-Host "  Launch Exploding Kittens 2 via Steam." -ForegroundColor Gray
 Write-Host "  The lobby overlay appears in the lower-left corner of" -ForegroundColor Gray
 Write-Host "  the Multiplayer > Play With Friends screen." -ForegroundColor Gray
 Write-Host ""
-Read-Host "Press Enter to exit"
+if (-not $NonInteractive) { Read-Host "Press Enter to exit" }

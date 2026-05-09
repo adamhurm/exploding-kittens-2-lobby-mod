@@ -61,7 +61,7 @@ if (-not (Test-Path $installer)) {
 }
 
 try {
-    & $installer
+    & $installer -NonInteractive
 } finally {
     Remove-Item $zipDst -Force -ErrorAction SilentlyContinue
     Remove-Item $tmp    -Recurse -Force -ErrorAction SilentlyContinue
