@@ -79,4 +79,32 @@ public class LobbyManagerTests
         // SOH (U+0001) is below 0x20: must be rejected
         Assert.False(LobbyManager.IsValidRoomName("EK-\x01HOME"));
     }
+
+    // Task 8: Single printable ASCII character (minimum length case) — should return true
+    [Fact]
+    public void IsValidRoomName_SinglePrintableAscii_ReturnsTrue()
+    {
+        Assert.True(LobbyManager.IsValidRoomName("A"));
+    }
+
+    // Task 8: Space (0x20) is the lowest printable ASCII — should be accepted
+    [Fact]
+    public void IsValidRoomName_SpaceAllowed()
+    {
+        Assert.True(LobbyManager.IsValidRoomName(" "));
+    }
+
+    // Task 8: Tilde (0x7E) is the highest printable ASCII — should be accepted
+    [Fact]
+    public void IsValidRoomName_TildeAllowed()
+    {
+        Assert.True(LobbyManager.IsValidRoomName("~"));
+    }
+
+    // Task 8: DEL character (0x7F) is above 0x7E — should return false
+    [Fact]
+    public void IsValidRoomName_DelReturnsFalse()
+    {
+        Assert.False(LobbyManager.IsValidRoomName("\x7F"));
+    }
 }

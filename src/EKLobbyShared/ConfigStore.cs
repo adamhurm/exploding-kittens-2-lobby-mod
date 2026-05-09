@@ -75,7 +75,7 @@ public static class ConfigStore
     {
         var path = ResolvedPath;
         var dir = Path.GetDirectoryName(path);
-        if (dir != null) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var json = JsonSerializer.Serialize(config, JsonOpts);
         File.WriteAllText(path, json);
         File.WriteAllText(HmacPath(path), ComputeHmac(json));

@@ -120,6 +120,43 @@ public class ConfigStoreTests : IDisposable
         }
     }
 
+    // Task 8: HMAC file corrupted — non-base64 garbage causes FormatException from
+    // Convert.FromBase64String inside ConfigStore.Load(). The Load() method does NOT
+    // swallow this exception; callers should be aware that a truly corrupted .hmac
+    // file (non-base64) propagates a FormatException rather than silently returning defaults.
+    [Fact]
+    public void Load_WhenHmacFileCorrupted_ThrowsFormatException()
+    {
+        ConfigStore.OverridePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        var cfg = new LobbyConfig { LobbyRoomName = "EK-TESTCORR" };
+        ConfigStore.Save(cfg);
+
+        // Overwrite the .hmac sidecar with non-base64 garbage bytes
+        var hmacPath = ConfigStore.OverridePath + ".hmac";
+        File.WriteAllBytes(hmacPath, new byte[] { 0xFF, 0xFE, 0x00, 0x01, 0x02, 0x03 });
+
+        // Convert.FromBase64String throws FormatException on the garbage bytes
+        Assert.Throws<FormatException>(() => ConfigStore.Load());
+    }
+
+    // Task 8: Round-trip preserves non-empty friends list
+    [Fact]
+    public void Save_And_Load_RoundTrip_PreservesFriends()
+    {
+        ConfigStore.OverridePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        var config = new LobbyConfig
+        {
+            LobbyRoomName = "EK-FRIENDS1",
+            Friends = new() { new FriendEntry { Steam64Id = "76561198000000001", DisplayName = "BobFriend" } }
+        };
+        ConfigStore.Save(config);
+        var loaded = ConfigStore.Load();
+
+        Assert.Single(loaded.Friends);
+        Assert.Equal("76561198000000001", loaded.Friends[0].Steam64Id);
+        Assert.Equal("BobFriend", loaded.Friends[0].DisplayName);
+    }
+
     // M-4: Random room code test
     [Fact]
     public void GetOrCreateRoomName_GeneratesRandomSuffix_NotSteamIdDerived()
