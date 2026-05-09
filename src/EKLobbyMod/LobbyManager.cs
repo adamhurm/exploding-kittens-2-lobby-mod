@@ -32,6 +32,7 @@ public class LobbyManager
     public event System.Action RejoinConfirmed;
     public event System.Action PlayerListChanged;
     public event System.Action AutoQueueCancelled;
+    public event System.Action GameStarted;
 
     public const string VersionPropertyKey = "ekmod_ver";
 
@@ -55,17 +56,30 @@ public class LobbyManager
     // Used to trigger the auto-queue countdown only after a game ends, not on home-lobby leave.
     private bool _inGame = false;
 
+    // True while an explicit mid-game leave is in progress (player clicked Leave button).
+    // Suppresses the post-game prompt — HandleLeftRoom will immediately rejoin home lobby.
+    private bool _leavingToHomeLobby = false;
+
+    // True while the player has requested a home lobby recreate (Leave → immediately Create).
+    private bool _recreatingHomeLobby = false;
+
     // Non-null while we are in the middle of a Steam invite join.
     // Holds the room name to restore once the join completes (so the friend's own home lobby
     // is not permanently overwritten by the host's room code).
     private string? _preInviteRoomName = null;
 
-    // True while the 5-second countdown is running in the overlay.
-    // Reset to false on OnJoinedRoom or when the player explicitly leaves mid-countdown.
+    // True while the 15-second countdown is running in the overlay.
+    // Reset to false on OnJoinedRoom or when the player explicitly clicks Leave mid-countdown.
     public bool AutoQueueActive { get; private set; }
 
     // Set to false to skip the auto-queue countdown entirely (reserved for future settings UI).
     public bool AutoQueueEnabled { get; set; } = true;
+
+    // True while the player is inside a non-home-lobby Photon room (game in progress).
+    public bool InGame => _inGame;
+
+    // True while the player is in their own home lobby room.
+    public bool InHomeLobby => _inHomeLobby;
 
     public IReadOnlyCollection<string> RoomSteamIds => _roomSteamIds;
     public bool IsMasterClient => _controller.IsMasterClient();
@@ -79,7 +93,7 @@ public class LobbyManager
         _controller.add_OnPlayerPropertiesChangedEvent(
             new System.Action<NetworkPlayer, Il2CppSystem.Collections.Generic.Dictionary<string, Il2CppSystem.Object>>(
                 (p, _) => HandlePlayerPropertiesUpdate(p)));
-        Plugin.Log.LogInfo($"LobbyManager ready — home lobby: {Config.LobbyRoomName}");
+        Plugin.Log.LogInfo($"LobbyManager ready - home lobby: {Config.LobbyRoomName}");
     }
 
     public static void Initialize(IMultiplayerController controller)
@@ -91,7 +105,7 @@ public class LobbyManager
             Instance._localSteamId = steamId;
             Instance.Config.LobbyRoomName = ConfigStore.GetOrCreateRoomName(steamId);
         }
-        Plugin.Log.LogInfo($"LobbyManager initialized — room: {Instance.Config.LobbyRoomName}");
+        Plugin.Log.LogInfo($"LobbyManager initialized - room: {Instance.Config.LobbyRoomName}");
 
         // Apply cold-launch +connect arg if one was captured during Plugin.Load()
         if (Plugin.Instance?._pendingConnectArg is string pending)
@@ -105,7 +119,7 @@ public class LobbyManager
     {
         if (string.IsNullOrEmpty(Config.LobbyRoomName))
         {
-            Plugin.Log.LogWarning("Home lobby room name not set — cannot rejoin");
+            Plugin.Log.LogWarning("Home lobby room name not set - cannot rejoin");
             return;
         }
         Plugin.Log.LogInfo($"Attempting to join room: {Config.LobbyRoomName}");
@@ -169,6 +183,15 @@ public class LobbyManager
             Plugin.Log.LogWarning($"JoinRoomByInvite: rejected invalid room name (length={roomName?.Length})");
             return;
         }
+        // Guard against a second invite arriving before the first join completes.
+        // Photon only allows one active JoinRoom call at a time, so accepting a second
+        // invite while one is pending would overwrite _preInviteRoomName and corrupt the
+        // home lobby name on restore. Reject the second invite to preserve the first.
+        if (_preInviteRoomName != null)
+        {
+            Plugin.Log.LogWarning($"JoinRoomByInvite: invite join already pending, ignoring {roomName}");
+            return;
+        }
         Plugin.Log.LogInfo($"Invite join: {roomName} (home lobby will be restored after join)");
         _preInviteRoomName = Config.LobbyRoomName;
         Config.LobbyRoomName = roomName; // in-memory only — no ConfigStore.Save
@@ -179,7 +202,7 @@ public class LobbyManager
 
     internal void HandleCreatedRoom()
     {
-        var name = _controller.GetRoomName();
+        var name = _controller.GetRoomName() ?? string.Empty;
         if (_preInviteRoomName != null)
         {
             // Invite join created the room (host not there yet) — restore own lobby name
@@ -202,13 +225,15 @@ public class LobbyManager
 
     internal void HandleJoinedRoom()
     {
-        var roomName = _controller.GetRoomName();
+        var roomName = _controller.GetRoomName() ?? string.Empty;
         if (roomName != Config.LobbyRoomName)
         {
             Plugin.Log.LogDebug($"OnJoinedRoom: game room '{roomName}'");
             _joinOrCreatePending = false;
             _inGame = true;
+            PendingRejoin = false; // clear post-game state — we're in a new game room
             AutoQueueActive = false; // cancel any countdown — game started
+            GameStarted?.Invoke();
             return;
         }
         _inGame = false;
@@ -238,41 +263,60 @@ public class LobbyManager
     {
         if (_inGame)
         {
-            // Left a game room — game just ended, trigger countdown back to home lobby
             _inGame = false;
             _roomSteamIds.Clear();
             _peerVersions.Clear();
             VersionMapChanged?.Invoke();
             PlayerListChanged?.Invoke();
+
+            if (_leavingToHomeLobby)
+            {
+                // Player explicitly clicked Leave mid-game — skip post-game prompt, go straight home
+                _leavingToHomeLobby = false;
+                Plugin.Log.LogInfo("Mid-game leave: rejoining home lobby directly");
+                JoinOrCreateHomeLobby();
+                return;
+            }
+
+            // Game ended normally — show post-game prompt; countdown only starts if Play Again is clicked
             PendingRejoin = true;
-            if (AutoQueueEnabled)
-                AutoQueueActive = true;
             RejoinAvailable?.Invoke();
-            Plugin.Log.LogInfo("Game ended — auto-queue started");
+            Plugin.Log.LogInfo("Game ended - showing post-game prompt");
             return;
         }
 
-        if (!_inHomeLobby) return;
-        _inHomeLobby = false;
-
-        if (_preInviteRoomName != null)
+        if (!_inHomeLobby)
         {
-            // Left current room intentionally to join a Steam invite — don't trigger auto-queue
-            _roomSteamIds.Clear();
-            _peerVersions.Clear();
-            VersionMapChanged?.Invoke();
-            PlayerListChanged?.Invoke();
-            Plugin.Log.LogInfo("Left room for invite join — auto-queue suppressed");
+            // Neither _inGame nor _inHomeLobby — unknown state (e.g. a game room we never
+            // tracked). Clear PendingRejoin so the overlay does not keep showing a stale
+            // post-game prompt that can never be resolved from this state.
+            PendingRejoin = false;
             return;
         }
-
-        // Left home lobby because a game is starting — clear state, no countdown
-        // (countdown fires when the game ends and we leave the game room)
+        _inHomeLobby = false;
         _roomSteamIds.Clear();
         _peerVersions.Clear();
         VersionMapChanged?.Invoke();
         PlayerListChanged?.Invoke();
-        Plugin.Log.LogInfo("Left home lobby — game starting");
+
+        if (_recreatingHomeLobby)
+        {
+            // Invariant: flag is cleared BEFORE calling JoinOrCreateHomeLobby so that
+            // if another left-room event fires during the rejoin attempt, the recreate
+            // path is not re-entered (which would trigger an infinite recreate loop).
+            _recreatingHomeLobby = false;
+            Plugin.Log.LogInfo("Recreate: rejoining home lobby");
+            JoinOrCreateHomeLobby();
+            return;
+        }
+
+        if (_preInviteRoomName != null)
+        {
+            Plugin.Log.LogInfo("Left room for invite join - auto-queue suppressed");
+            return;
+        }
+
+        Plugin.Log.LogInfo("Left home lobby - game starting");
     }
 
     private void HandlePlayerEntered(NetworkPlayer player)
@@ -362,6 +406,47 @@ public class LobbyManager
         }
     }
 
+    // Called when the player clicks "Play Again" in the overlay.
+    // Clears the post-game UI and queues a new random game match — no countdown shown.
+    public void RequestPlayAgain()
+    {
+        PendingRejoin = false;
+        AutoQueueActive = false;
+        RejoinConfirmed?.Invoke(); // clears post-game UI silently (no countdown)
+        _controller.JoinRandomRoom();
+        Plugin.Log.LogInfo("Play Again: queueing for matchmaking");
+    }
+
+    // Leaves the home lobby and immediately recreates it (fresh room, same name).
+    // Useful when no one has joined and the player wants to reset or force a new room.
+    public void RecreateHomeLobby()
+    {
+        _recreatingHomeLobby = true;
+        _controller.LeaveRoom();
+        Plugin.Log.LogInfo("Recreating home lobby");
+    }
+
+    // Called when the player clicks "Leave" in the overlay (mid-game or post-game).
+    // Cancels any running countdown and returns to the home lobby.
+    public void LeaveToHomeLobby()
+    {
+        AutoQueueActive = false;
+        AutoQueueCancelled?.Invoke(); // stops countdown coroutine in overlay
+
+        if (_inGame)
+        {
+            // Mid-game: leave game room first; HandleLeftRoom will then call JoinOrCreateHomeLobby
+            _leavingToHomeLobby = true;
+            _controller.LeaveRoom();
+        }
+        else
+        {
+            // Post-game: already left game room, just rejoin home lobby
+            PendingRejoin = false;
+            JoinOrCreateHomeLobby();
+        }
+    }
+
     public void KickPlayer(string steam64Id)
     {
         _controller.AllowKickPlayers(true);
@@ -372,9 +457,12 @@ public class LobbyManager
     internal void HandleJoinRoomFailed(short returnCode, string message)
     {
         if (!_joinOrCreatePending) return;
+        // Clear before calling CreateRoom so a spurious second OnJoinRoomFailed during
+        // the create flight cannot trigger a second CreateRoom call.
+        _joinOrCreatePending = false;
 
         // Room not found (Photon code 32758) or similar — create it instead
-        Plugin.Log.LogInfo($"JoinRoom failed ({returnCode}): {message} — creating room");
+        Plugin.Log.LogInfo($"JoinRoom failed ({returnCode}): {message} - creating room");
         // ctor: publishUserId, isOpen, isVisible, maxPlayers, playerTtl, emptyRoomTtl
         var opts = new NetworkRoomOptions(false, true, false, 5, 60000, 0);
         _controller.CreateRoom(Config.LobbyRoomName, opts, null);
