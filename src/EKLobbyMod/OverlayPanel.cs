@@ -19,6 +19,12 @@ public class OverlayPanel : MonoBehaviour
     private Image _rejoinBtnImage = null!;
     private Text _rejoinPromptLabel = null!;
 
+    // Bottom-row buttons — exactly two are visible at a time depending on game state
+    private GameObject _inviteAllGo = null!;
+    private GameObject _playAgainGo = null!;
+    private GameObject _leaveGo = null!;
+    private GameObject _recreateGo = null!;
+
     private GameObject _minTab = null!;
     private RectTransform _friendListContentRt = null!;
     private Text _codeLabelText = null!;
@@ -53,7 +59,7 @@ public class OverlayPanel : MonoBehaviour
         var canvas = FindTopCanvas();
         if (canvas == null)
         {
-            Plugin.Log.LogWarning("No Canvas found — overlay not injected");
+            Plugin.Log.LogWarning("No Canvas found - overlay not injected");
             return null;
         }
 
@@ -79,6 +85,7 @@ public class OverlayPanel : MonoBehaviour
         manager.PlayerListChanged  += (System.Action)panel.OnPlayerListChanged;
         manager.AutoQueueCancelled += (System.Action)panel.OnAutoQueueCancelled;
         manager.VersionMapChanged  += (System.Action)panel.OnVersionMapChanged;
+        manager.GameStarted        += (System.Action)panel.OnGameStarted;
         return panel;
     }
 
@@ -317,24 +324,74 @@ public class OverlayPanel : MonoBehaviour
         hintRt.anchorMax = new Vector2(0.5f, 0.5f);
         hintRt.pivot = new Vector2(0.5f, 0.5f);
         hintRt.sizeDelta = new Vector2(200 * s, 20 * s);
-        hintRt.anchoredPosition = new Vector2(0, -30 * s);
+        hintRt.anchoredPosition = new Vector2(0, -20 * s);
+
+        // Leave button — inside the overlay so it's reachable while the overlay blocks everything else
+        var cdLeaveGo = new GameObject("Btn_Leave_Countdown");
+        cdLeaveGo.transform.SetParent(countdownOverlayGo.transform, false);
+        var cdLeaveRt = cdLeaveGo.AddComponent<RectTransform>();
+        cdLeaveRt.anchorMin = new Vector2(0.5f, 0.5f);
+        cdLeaveRt.anchorMax = new Vector2(0.5f, 0.5f);
+        cdLeaveRt.pivot = new Vector2(0.5f, 0.5f);
+        cdLeaveRt.sizeDelta = new Vector2(130 * s, 32 * s);
+        cdLeaveRt.anchoredPosition = new Vector2(0, -70 * s);
+        cdLeaveGo.AddComponent<Image>().color = EkRedDark;
+        var cdLeaveBtn = cdLeaveGo.AddComponent<Button>();
+        var cdLeaveTxt = CreateText(cdLeaveGo.transform, "LEAVE", (int)(13 * s));
+        cdLeaveTxt.alignment = TextAnchor.MiddleCenter;
+        cdLeaveTxt.rectTransform.anchorMin = Vector2.zero;
+        cdLeaveTxt.rectTransform.anchorMax = Vector2.one;
+        cdLeaveTxt.rectTransform.offsetMin = Vector2.zero;
+        cdLeaveTxt.rectTransform.offsetMax = Vector2.zero;
+        cdLeaveBtn.onClick.AddListener((UnityEngine.Events.UnityAction)DoLeave);
+
+        // ── Bottom row — two buttons visible at a time depending on game state ────
+        // Home lobby:  INVITE ALL | REJOIN
+        // In-game:     INVITE ALL | LEAVE
+        // Post-game:   PLAY AGAIN | LEAVE
 
         var inviteAllBtn = CreateButton(_expandedPanel.transform, "INVITE ALL", (int)(13 * s),
             new Vector2(6 * s, 6 * s), new Vector2(136 * s, 38 * s));
         inviteAllBtn.GetComponent<Image>().color = EkRed;
         inviteAllBtn.onClick.AddListener((UnityEngine.Events.UnityAction)InviteAll);
+        _inviteAllGo = inviteAllBtn.gameObject;
+
+        // PLAY AGAIN — same left position, hidden initially (shown post-game only)
+        var playAgainBtn = CreateButton(_expandedPanel.transform, "PLAY AGAIN", (int)(13 * s),
+            new Vector2(6 * s, 6 * s), new Vector2(136 * s, 38 * s));
+        playAgainBtn.GetComponent<Image>().color = EkGreen;
+        playAgainBtn.onClick.AddListener((UnityEngine.Events.UnityAction)DoPlayAgain);
+        _playAgainGo = playAgainBtn.gameObject;
+        _playAgainGo.SetActive(false);
 
         _rejoinButton = CreateButton(_expandedPanel.transform, "REJOIN", (int)(13 * s),
             new Vector2(152 * s, 6 * s), new Vector2(136 * s, 38 * s));
         _rejoinBtnImage = _rejoinButton.GetComponent<Image>();
         _rejoinButton.onClick.AddListener((UnityEngine.Events.UnityAction)DoRejoin);
+
+        // RECREATE — right position, shown in home lobby (leave current room + immediately recreate)
+        var recreateBtn = CreateButton(_expandedPanel.transform, "RECREATE", (int)(13 * s),
+            new Vector2(152 * s, 6 * s), new Vector2(136 * s, 38 * s));
+        recreateBtn.GetComponent<Image>().color = EkDark;
+        recreateBtn.onClick.AddListener((UnityEngine.Events.UnityAction)DoRecreate);
+        _recreateGo = recreateBtn.gameObject;
+        _recreateGo.SetActive(false);
+
+        // LEAVE — same right position, hidden initially (shown in-game and post-game)
+        var leaveBtn = CreateButton(_expandedPanel.transform, "LEAVE", (int)(13 * s),
+            new Vector2(152 * s, 6 * s), new Vector2(136 * s, 38 * s));
+        leaveBtn.GetComponent<Image>().color = EkRedDark;
+        leaveBtn.onClick.AddListener((UnityEngine.Events.UnityAction)DoLeave);
+        _leaveGo = leaveBtn.gameObject;
+        _leaveGo.SetActive(false);
     }
 
     public void ShowRejoinPrompt()
     {
+        if (_manager == null) return;
         SetExpanded(true);
         _rejoinPromptLabel.gameObject.SetActive(true);
-        _rejoinBtnImage.color = new Color(0.12f, 0.48f, 0.12f, 1f);
+        RefreshBottomRow();
 
         if (_manager.AutoQueueActive)
         {
@@ -355,6 +412,7 @@ public class OverlayPanel : MonoBehaviour
         _countdownOverlay.SetActive(false);
         _rejoinPromptLabel.gameObject.SetActive(false);
         _rejoinBtnImage.color = EkDark;
+        RefreshBottomRow();
     }
 
     public void OnAutoQueueCancelled()
@@ -373,11 +431,13 @@ public class OverlayPanel : MonoBehaviour
     public void OnPlayerListChanged()
     {
         RefreshPartyIndicator();
+        RefreshBottomRow();
         if (_expanded) RefreshFriendList();
     }
 
     public void OnVersionMapChanged()
     {
+        if (_manager == null) return;
         var drift = _manager.HasVersionDrift;
         if (_driftBand != null)
             _driftBand.SetActive(drift);
@@ -417,6 +477,7 @@ public class OverlayPanel : MonoBehaviour
 
     private void RefreshPartyIndicator()
     {
+        if (_manager == null) return;
         if (_partyDot == null || _partyText == null) return;
         int count = _manager.RoomSteamIds.Count;
 
@@ -562,7 +623,29 @@ public class OverlayPanel : MonoBehaviour
             _manager.Config.Friends.ConvertAll(f => f.Steam64Id),
             _manager.Config.LobbyRoomName);
 
+    private void RefreshBottomRow()
+    {
+        bool inGame = _manager.InGame;
+        bool inHomeLobby = _manager.InHomeLobby;
+        bool postGame = !inGame && _manager.PendingRejoin;
+        bool notInRoom = !inGame && !inHomeLobby && !postGame;
+
+        _inviteAllGo.SetActive(!postGame);                        // home lobby + in-game
+        _playAgainGo.SetActive(postGame);                         // post-game only
+        _rejoinButton.gameObject.SetActive(notInRoom);            // only when not in any room
+        _recreateGo.SetActive(inHomeLobby);                       // home lobby only
+        _leaveGo.SetActive(inGame || postGame);                   // in-game + post-game
+    }
+
+    public void OnGameStarted() => HideRejoinPrompt();
+
     private void DoRejoin() => _manager.JoinOrCreateHomeLobby();
+
+    private void DoLeave() => _manager.LeaveToHomeLobby();
+
+    private void DoPlayAgain() => _manager.RequestPlayAgain();
+
+    private void DoRecreate() => _manager.RecreateHomeLobby();
 
     private void OpenFriendPicker() =>
         FriendPickerPopup.Open(_manager, transform.parent, RefreshFriendList);
