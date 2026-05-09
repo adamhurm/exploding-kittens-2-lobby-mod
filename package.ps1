@@ -4,12 +4,25 @@
 
 $ErrorActionPreference = "Stop"
 
+$BepInExUrl = "https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
+
 # Read version from Plugin.cs so there's one source of truth
 $versionLine = Select-String -Path "src\EKLobbyMod\Plugin.cs" -Pattern 'PluginVersion\s*=\s*"([^"]+)"'
 $version = $versionLine.Matches[0].Groups[1].Value
 $packageName = "EKLobbyMod-v$version"
 
 Write-Host "Packaging $packageName..." -ForegroundColor Cyan
+
+# ── BepInEx core ──────────────────────────────────────────────────────────────
+if (-not (Test-Path "libs\BepInEx\core")) {
+    Write-Host "BepInEx core not found — downloading..." -ForegroundColor Gray
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $tmpZip = Join-Path $env:TEMP "BepInEx_core.zip"
+    Invoke-WebRequest $BepInExUrl -OutFile $tmpZip -UseBasicParsing
+    Expand-Archive $tmpZip -DestinationPath libs -Force
+    Remove-Item $tmpZip -Force
+    Write-Host "BepInEx ready." -ForegroundColor Green
+}
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 Write-Host "Building EKLobbyMod..." -ForegroundColor Gray

@@ -7,6 +7,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$BepInExUrl = "https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.755+3fab71a.zip"
+
+if (-not (Test-Path "libs\BepInEx\core")) {
+    Write-Host "BepInEx core not found — downloading..." -ForegroundColor Gray
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $tmpZip = Join-Path $env:TEMP "BepInEx_core.zip"
+    Invoke-WebRequest $BepInExUrl -OutFile $tmpZip -UseBasicParsing
+    Expand-Archive $tmpZip -DestinationPath libs -Force
+    Remove-Item $tmpZip -Force
+    Write-Host "BepInEx ready." -ForegroundColor Green
+}
+
 Write-Host "Building EKLobbyMod..." -ForegroundColor Cyan
 dotnet publish src/EKLobbyMod/EKLobbyMod.csproj -c Release -o out/EKLobbyMod
 
