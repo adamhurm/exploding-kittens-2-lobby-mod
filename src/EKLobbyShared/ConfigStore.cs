@@ -74,7 +74,8 @@ public static class ConfigStore
     public static void Save(LobbyConfig config)
     {
         var path = ResolvedPath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var dir = Path.GetDirectoryName(path);
+        if (dir != null) Directory.CreateDirectory(dir);
         var json = JsonSerializer.Serialize(config, JsonOpts);
         File.WriteAllText(path, json);
         File.WriteAllText(HmacPath(path), ComputeHmac(json));

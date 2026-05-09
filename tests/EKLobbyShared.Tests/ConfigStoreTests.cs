@@ -97,6 +97,29 @@ public class ConfigStoreTests : IDisposable
         Assert.NotEqual("EK-EVIL1234", loaded.LobbyRoomName);
     }
 
+    // Bug 7: null-forgiving operator on GetDirectoryName — regression test
+    [Fact]
+    public void Save_WithBareFilenameOverridePath_DoesNotThrow()
+    {
+        // A bare filename has no directory separator, so Path.GetDirectoryName returns
+        // null (on .NET) or empty string — this previously caused a NullReferenceException
+        // because the null-forgiving operator ! was used without a guard.
+        var bareFilename = "testconfig_regression.json";
+        ConfigStore.OverridePath = bareFilename;
+        try
+        {
+            var ex = Record.Exception(() => ConfigStore.Save(new LobbyConfig { LobbyRoomName = "EK-REGRESSION" }));
+            Assert.Null(ex);
+        }
+        finally
+        {
+            ConfigStore.OverridePath = _tempPath;
+            // Clean up files that may have been created in the working directory
+            if (File.Exists(bareFilename)) File.Delete(bareFilename);
+            if (File.Exists(bareFilename + ".hmac")) File.Delete(bareFilename + ".hmac");
+        }
+    }
+
     // M-4: Random room code test
     [Fact]
     public void GetOrCreateRoomName_GeneratesRandomSuffix_NotSteamIdDerived()
