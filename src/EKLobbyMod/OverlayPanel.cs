@@ -84,8 +84,13 @@ public class OverlayPanel : MonoBehaviour
 
     private void Build()
     {
-        // Area-based scale: matches height/864 exactly on 16:9, scales up for ultrawide
-        _s = Mathf.Clamp(Mathf.Sqrt(Screen.width * (float)Screen.height) / 1152f, 0.6f, 2.5f);
+        // Divide by canvas.scaleFactor so the overlay keeps consistent screen-pixel size
+        // regardless of whatever CanvasScaler the game configures (scaleFactor=1 → no change).
+        var parentCanvas = GetComponentInParent<Canvas>();
+        float sf = (parentCanvas != null && parentCanvas.scaleFactor > 0f) ? parentCanvas.scaleFactor : 1f;
+        float rawS = Screen.height / 864f;
+        _s = Mathf.Clamp(rawS / sf, 0.6f, 2.5f);
+        Plugin.Log.LogInfo($"[OverlayPanel] canvas='{parentCanvas?.name}' scaleFactor={sf:F2} rawS={rawS:F3} _s={_s:F3} screen={Screen.width}x{Screen.height}");
         BuildMinTab();
         BuildExpandedPanel();
         SetExpanded(false);
@@ -335,7 +340,7 @@ public class OverlayPanel : MonoBehaviour
         {
             if (_countdownCoroutine != null) StopCoroutine(_countdownCoroutine);
             _countdownOverlay.SetActive(true);
-            _countdownDigit.text = "5";
+            _countdownDigit.text = "15";
             _countdownCoroutine = StartCoroutine("RunCountdown");
         }
     }
@@ -564,7 +569,7 @@ public class OverlayPanel : MonoBehaviour
 
     private System.Collections.IEnumerator RunCountdown()
     {
-        for (int i = 5; i >= 1; i--)
+        for (int i = 15; i >= 1; i--)
         {
             _countdownDigit.text = i.ToString();
             yield return new WaitForSeconds(1f);
@@ -588,6 +593,7 @@ public class OverlayPanel : MonoBehaviour
         int maxOrder = int.MinValue;
         foreach (var c in FindObjectsOfType<Canvas>())
         {
+            if (c.renderMode == RenderMode.WorldSpace) continue;
             if (c.sortingOrder > maxOrder) { maxOrder = c.sortingOrder; top = c; }
         }
         return top;

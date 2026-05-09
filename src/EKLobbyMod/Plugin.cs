@@ -41,10 +41,11 @@ public class Plugin : BasePlugin
         {
             _joinRequestedCallback = Callback<GameRichPresenceJoinRequested_t>.Create(
                 new System.Action<GameRichPresenceJoinRequested_t>(OnGameJoinRequested));
+            Log.LogInfo("Steam join callback registered");
         }
         catch (System.Exception ex)
         {
-            Log.LogWarning($"Steam join callback unavailable (non-blittable struct): {ex.Message}");
+            Log.LogWarning($"Steam join callback unavailable ({ex.GetType().Name}): {ex.Message}");
         }
 
         // Cold-launch: Steam may pass the room code as a command-line arg
@@ -79,9 +80,14 @@ public class Plugin : BasePlugin
     private static void OnGameJoinRequested(GameRichPresenceJoinRequested_t param)
     {
         var connect = param.m_rgchConnect;
-        // debug level only; truncate to confirm presence without exposing full value
-        Log.LogDebug($"Steam join requested — connect string present ({connect?.Length ?? 0} chars)");
-        if (!string.IsNullOrEmpty(connect))
-            LobbyManager.Instance?.JoinSpecificRoom(connect);
+        Log.LogInfo($"Steam join requested ({connect?.Length ?? 0} chars)");
+        if (string.IsNullOrEmpty(connect)) return;
+        if (LobbyManager.Instance != null)
+            LobbyManager.Instance.JoinRoomByInvite(connect);
+        else
+        {
+            Instance._pendingConnectArg = connect;
+            Log.LogInfo("Steam join: LobbyManager not ready, stored as pending");
+        }
     }
 }

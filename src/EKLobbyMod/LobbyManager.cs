@@ -51,6 +51,15 @@ public class LobbyManager
 
     public event System.Action VersionMapChanged;
 
+    // True while the player is inside a non-home-lobby Photon room (game in progress).
+    // Used to trigger the auto-queue countdown only after a game ends, not on home-lobby leave.
+    private bool _inGame = false;
+
+    // Non-null while we are in the middle of a Steam invite join.
+    // Holds the room name to restore once the join completes (so the friend's own home lobby
+    // is not permanently overwritten by the host's room code).
+    private string? _preInviteRoomName = null;
+
     // True while the 5-second countdown is running in the overlay.
     // Reset to false on OnJoinedRoom or when the player explicitly leaves mid-countdown.
     public bool AutoQueueActive { get; private set; }
@@ -87,7 +96,7 @@ public class LobbyManager
         // Apply cold-launch +connect arg if one was captured during Plugin.Load()
         if (Plugin.Instance?._pendingConnectArg is string pending)
         {
-            Instance.JoinSpecificRoom(pending);
+            Instance.JoinRoomByInvite(pending);
             Plugin.Instance._pendingConnectArg = null;
         }
     }
@@ -150,17 +159,41 @@ public class LobbyManager
         JoinOrCreateHomeLobby();
     }
 
+    // Like JoinSpecificRoom but used for Steam invite acceptance.
+    // Swaps the room name in-memory only (no config write) so HandleJoinedRoom/HandleCreatedRoom
+    // recognise the room, then restores the friend's own home lobby after the join completes.
+    public void JoinRoomByInvite(string roomName)
+    {
+        if (!IsValidRoomName(roomName))
+        {
+            Plugin.Log.LogWarning($"JoinRoomByInvite: rejected invalid room name (length={roomName?.Length})");
+            return;
+        }
+        Plugin.Log.LogInfo($"Invite join: {roomName} (home lobby will be restored after join)");
+        _preInviteRoomName = Config.LobbyRoomName;
+        Config.LobbyRoomName = roomName; // in-memory only — no ConfigStore.Save
+        JoinOrCreateHomeLobby();
+    }
+
     // ── Photon event handlers (called from Harmony patches below) ─────────────
 
     internal void HandleCreatedRoom()
     {
         var name = _controller.GetRoomName();
-        if (_joinOrCreatePending)
+        if (_preInviteRoomName != null)
+        {
+            // Invite join created the room (host not there yet) — restore own lobby name
+            Config.LobbyRoomName = _preInviteRoomName;
+            ConfigStore.Save(Config);
+            _preInviteRoomName = null;
+        }
+        else if (_joinOrCreatePending)
         {
             Config.LobbyRoomName = name;
             ConfigStore.Save(Config);
         }
         _joinOrCreatePending = false;
+        _inGame = false;
         _inHomeLobby = true;
         _controller.AllowKickPlayers(true);
         RefreshRoomPlayers();
@@ -172,10 +205,13 @@ public class LobbyManager
         var roomName = _controller.GetRoomName();
         if (roomName != Config.LobbyRoomName)
         {
-            Plugin.Log.LogDebug($"OnJoinedRoom: ignoring non-lobby room '{roomName}'");
+            Plugin.Log.LogDebug($"OnJoinedRoom: game room '{roomName}'");
             _joinOrCreatePending = false;
+            _inGame = true;
+            AutoQueueActive = false; // cancel any countdown — game started
             return;
         }
+        _inGame = false;
         _inHomeLobby = true;
         _joinOrCreatePending = false;
         PendingRejoin = false;
@@ -189,37 +225,54 @@ public class LobbyManager
             Plugin.Log.LogInfo($"Joined room: {roomName}");
             _lastLoggedRoom = roomName;
         }
+        if (_preInviteRoomName != null)
+        {
+            // Restore friend's own home lobby after successfully joining the invite room
+            Config.LobbyRoomName = _preInviteRoomName;
+            ConfigStore.Save(Config);
+            _preInviteRoomName = null;
+        }
     }
 
     internal void HandleLeftRoom()
     {
-        if (!_inHomeLobby) return;
-        _inHomeLobby = false;
-
-        if (AutoQueueActive)
+        if (_inGame)
         {
-            // A second OnLeftRoom while the countdown is running means the player clicked
-            // the game's native Leave button — treat this as an explicit opt-out.
-            AutoQueueActive = false;
-            PendingRejoin = false;
+            // Left a game room — game just ended, trigger countdown back to home lobby
+            _inGame = false;
             _roomSteamIds.Clear();
             _peerVersions.Clear();
             VersionMapChanged?.Invoke();
             PlayerListChanged?.Invoke();
-            AutoQueueCancelled?.Invoke();
-            Plugin.Log.LogInfo("Left room during countdown — auto-queue cancelled");
+            PendingRejoin = true;
+            if (AutoQueueEnabled)
+                AutoQueueActive = true;
+            RejoinAvailable?.Invoke();
+            Plugin.Log.LogInfo("Game ended — auto-queue started");
             return;
         }
 
-        PendingRejoin = true;
-        if (AutoQueueEnabled)
-            AutoQueueActive = true;
+        if (!_inHomeLobby) return;
+        _inHomeLobby = false;
+
+        if (_preInviteRoomName != null)
+        {
+            // Left current room intentionally to join a Steam invite — don't trigger auto-queue
+            _roomSteamIds.Clear();
+            _peerVersions.Clear();
+            VersionMapChanged?.Invoke();
+            PlayerListChanged?.Invoke();
+            Plugin.Log.LogInfo("Left room for invite join — auto-queue suppressed");
+            return;
+        }
+
+        // Left home lobby because a game is starting — clear state, no countdown
+        // (countdown fires when the game ends and we leave the game room)
         _roomSteamIds.Clear();
         _peerVersions.Clear();
         VersionMapChanged?.Invoke();
         PlayerListChanged?.Invoke();
-        RejoinAvailable?.Invoke();
-        Plugin.Log.LogInfo("Left room — rejoin prompt raised");
+        Plugin.Log.LogInfo("Left home lobby — game starting");
     }
 
     private void HandlePlayerEntered(NetworkPlayer player)
