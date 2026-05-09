@@ -9,8 +9,8 @@ namespace EKLobbyMod;
 /// </summary>
 public static class PhotonPropertyHelper
 {
-    // Matches LobbyManager.VersionPropertyKey — defined here for compile independence.
     private const string VersionKey = "ekmod_ver";
+    internal const string PartyGameKey = "ek_party_game";
 
     /// <summary>
     /// Writes the local player's mod version into their Photon custom properties.
@@ -28,6 +28,35 @@ public static class PhotonPropertyHelper
         catch (System.Exception ex)
         {
             Plugin.Log.LogWarning($"[PhotonPropertyHelper] SetLocalVersion failed: {ex.Message}");
+        }
+    }
+
+    internal static void SetRoomGameProperty(string gameRoomName)
+    {
+        try
+        {
+            var props = new Hashtable();
+            props[PartyGameKey] = gameRoomName;
+            Photon.Pun.PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+            Plugin.Log.LogInfo($"[PhotonPropertyHelper] Set {PartyGameKey} = {gameRoomName}");
+        }
+        catch (System.Exception ex)
+        {
+            Plugin.Log.LogWarning($"[PhotonPropertyHelper] SetRoomGameProperty failed: {ex.Message}");
+        }
+    }
+
+    internal static void ClearRoomGameProperty()
+    {
+        try
+        {
+            var props = new Hashtable();
+            props[PartyGameKey] = null;
+            Photon.Pun.PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        }
+        catch (System.Exception ex)
+        {
+            Plugin.Log.LogWarning($"[PhotonPropertyHelper] ClearRoomGameProperty failed: {ex.Message}");
         }
     }
 

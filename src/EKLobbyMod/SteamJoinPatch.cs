@@ -13,7 +13,11 @@ static class SteamJoinPatch
 {
     internal static void TryApply(Harmony harmony)
     {
-        MethodBase? method = null;
+        // Collect every type that DECLARES _OnRichPresenceJoinRequested (DeclaredOnly excludes
+        // types that merely inherit the method). When both a base class and a derived class
+        // declare the method (derived uses C# 'new' to shadow), Steamworks registers its
+        // callback against the base class, so we must patch the base-most candidate.
+        var candidates = new System.Collections.Generic.List<MethodBase>();
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             Type[] types;
@@ -27,22 +31,39 @@ static class SteamJoinPatch
                 try
                 {
                     var m = type.GetMethod("_OnRichPresenceJoinRequested",
-                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                        | BindingFlags.DeclaredOnly);
                     if (m == null) continue;
-                    Plugin.Log.LogInfo($"[SteamJoinPatch] Found: {type.FullName}.{m.Name}");
-                    method = m;
+                    Plugin.Log.LogInfo($"[SteamJoinPatch] Candidate: {type.FullName}.{m.Name}");
+                    candidates.Add(m);
                 }
                 catch { }
-                if (method != null) break;
             }
-            if (method != null) break;
         }
 
-        if (method == null)
+        if (candidates.Count == 0)
         {
             Plugin.Log.LogWarning("[SteamJoinPatch] _OnRichPresenceJoinRequested not found; Steam overlay joins unavailable");
             return;
         }
+
+        // Among candidates, pick the base-most declaring type.
+        // Any candidate whose DeclaringType is a subclass of another candidate's DeclaringType
+        // is a shadow (new) override — prefer the ancestor.
+        MethodBase? method = null;
+        foreach (var candidate in candidates)
+        {
+            var dt = candidate.DeclaringType!;
+            bool isBase = true;
+            foreach (var other in candidates)
+            {
+                if (other == candidate) continue;
+                if (dt.IsSubclassOf(other.DeclaringType!)) { isBase = false; break; }
+            }
+            if (isBase) { method = candidate; break; }
+        }
+        method ??= candidates[0];
+        Plugin.Log.LogInfo($"[SteamJoinPatch] Selected: {method.DeclaringType?.FullName}.{method.Name}");
 
         try
         {

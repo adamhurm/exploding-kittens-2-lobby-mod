@@ -21,6 +21,9 @@ public class Plugin : BasePlugin
     // Singleton instance — set in Load() so LobbyManager can read pending args
     internal static Plugin? Instance { get; private set; }
 
+    // Harmony instance stored statically so PhotonClientFinder can apply runtime patches
+    internal static Harmony HarmonyInstance { get; private set; } = null!;
+
     // Pending +connect arg from cold-launch command line; applied in LobbyManager.Initialize()
     internal string? _pendingConnectArg;
 
@@ -34,9 +37,9 @@ public class Plugin : BasePlugin
         Log.LogInfo($"{PluginName} v{PluginVersion} loaded");
         ClassInjector.RegisterTypeInIl2Cpp<OverlayPanel>();
         ClassInjector.RegisterTypeInIl2Cpp<FriendPickerPopup>();
-        var harmony = new Harmony(PluginGuid);
-        harmony.PatchAll();
-        SteamJoinPatch.TryApply(harmony);
+        HarmonyInstance = new Harmony(PluginGuid);
+        HarmonyInstance.PatchAll();
+        SteamJoinPatch.TryApply(HarmonyInstance);
         SceneManager.sceneLoaded += new System.Action<Scene, LoadSceneMode>(OnSceneLoaded);
 
         // Cold-launch: Steam may pass the room code as a command-line arg

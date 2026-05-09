@@ -21,6 +21,9 @@ public static class PhotonClientFinder
 
             if (LobbyManager.Instance == null && Controller != null)
                 LobbyManager.Initialize(new PhotonControllerBridge(Controller));
+
+            PartyGamePatch.TryApply(Plugin.HarmonyInstance, Controller);
+            RoomPropertiesPatch.TryApply(Plugin.HarmonyInstance);
         }
     }
 }

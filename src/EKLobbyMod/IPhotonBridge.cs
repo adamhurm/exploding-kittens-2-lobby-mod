@@ -14,6 +14,7 @@ public interface IPhotonBridge
     void AllowKickPlayers(bool allow);
     void KickPlayer(string userId);
     void SetLocalVersion(string version);
+    void ClearPartyGameRoom();
 
     string GetRoomName();
     IReadOnlyList<PlayerInfo> GetRoomPlayers();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EKLobbyShared;
+using ExitGames.Client.Photon;
 using HarmonyLib;
 using MGS.Network.Photon;
 
@@ -61,6 +62,9 @@ public class LobbyManager
 
     // True while the player has requested a home lobby recreate (Leave → immediately Create).
     private bool _recreatingHomeLobby = false;
+
+    // Set true by OnPartyGameStarting so HandleRoomPropertiesUpdated skips the initiator.
+    private bool _partyGameInitiatedByMe = false;
 
     // Non-null while we are in the middle of a Steam invite join.
     // Holds the room name to restore once the join completes (so the friend's own home lobby
@@ -208,8 +212,7 @@ public class LobbyManager
         var name = _bridge.GetRoomName() ?? string.Empty;
         if (_preInviteRoomName != null)
         {
-            // Invite join created the room (host not there yet) — restore own lobby name
-            Config.LobbyRoomName = _preInviteRoomName;
+            // Invite join created the room (host not there yet) — persist party room
             ConfigStore.Save(Config);
             _preInviteRoomName = null;
         }
@@ -223,6 +226,8 @@ public class LobbyManager
         _inHomeLobby = true;
         _bridge.AllowKickPlayers(true);
         RefreshRoomPlayers();
+        if (_bridge.IsMasterClient())
+            _bridge.ClearPartyGameRoom();
         LogInfo($"Room created: {name}");
     }
 
@@ -248,6 +253,8 @@ public class LobbyManager
         RefreshRoomPlayers();
         _bridge.SetLocalVersion(Plugin.PluginVersion);
         RebuildVersionMap();
+        if (_bridge.IsMasterClient())
+            _bridge.ClearPartyGameRoom();
         if (roomName != _lastLoggedRoom)
         {
             LogInfo($"Joined room: {roomName}");
@@ -255,8 +262,7 @@ public class LobbyManager
         }
         if (_preInviteRoomName != null)
         {
-            // Restore friend's own home lobby after successfully joining the invite room
-            Config.LobbyRoomName = _preInviteRoomName;
+            // Persist party room as home lobby after successfully joining
             ConfigStore.Save(Config);
             _preInviteRoomName = null;
         }
@@ -442,6 +448,28 @@ public class LobbyManager
         // Room not found (Photon code 32758) or similar — create it instead
         LogInfo($"JoinRoom failed ({returnCode}): {message} - creating room");
         _bridge.CreateRoom(Config.LobbyRoomName);
+    }
+
+    // ── Party game launch ──────────────────────────────────────────────────────
+
+    // Called by PartyGamePatch.Prefix before the CreateRoom Photon operation fires.
+    // Writes ek_party_game to the current lobby room so all party members auto-join.
+    internal void OnPartyGameStarting(string gameRoomName)
+    {
+        _partyGameInitiatedByMe = true;
+        PhotonPropertyHelper.SetRoomGameProperty(gameRoomName);
+        LogInfo($"[Party] Routing game to {gameRoomName} - notifying party via room property");
+    }
+
+    internal void HandleRoomPropertiesUpdated(Hashtable props)
+    {
+        if (_partyGameInitiatedByMe) { _partyGameInitiatedByMe = false; return; }
+        if (!_inHomeLobby || props == null) return;
+        if (!props.ContainsKey(PhotonPropertyHelper.PartyGameKey)) return;
+        var gameRoom = props[PhotonPropertyHelper.PartyGameKey]?.ToString();
+        if (!IsValidRoomName(gameRoom)) return;
+        LogInfo($"[Party] Leader started game in {gameRoom} - auto-joining");
+        _bridge.JoinRoom(gameRoom);
     }
 
     // ── Harmony patches ────────────────────────────────────────────────────────

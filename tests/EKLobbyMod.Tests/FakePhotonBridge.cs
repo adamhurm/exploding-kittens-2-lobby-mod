@@ -25,6 +25,7 @@ public class FakePhotonBridge : IPhotonBridge
     public void AllowKickPlayers(bool allow) { }
     public void KickPlayer(string userId) { }
     public void SetLocalVersion(string version) { }
+    public void ClearPartyGameRoom() { }
 
     public void FirePlayerEntered(PlayerInfo p) => PlayerEntered?.Invoke(p);
     public void FirePlayerLeft(PlayerInfo p) => PlayerLeft?.Invoke(p);

@@ -114,12 +114,12 @@ public class LobbyManagerStateMachineTests : IDisposable
     // ── Invite join, host present ─────────────────────────────────────────────
 
     [Fact]
-    public void JoinRoomByInvite_HostPresent_RestoresHomeLobbyName()
+    public void JoinRoomByInvite_HostPresent_PersistsPartyRoom()
     {
         _fake.CurrentRoomName = "FRIEND-ROOM";
         _manager.JoinRoomByInvite("FRIEND-ROOM");
         _manager.HandleJoinedRoom();
-        Assert.Equal("MY-ROOM", _manager.Config.LobbyRoomName);
+        Assert.Equal("FRIEND-ROOM", _manager.Config.LobbyRoomName);
     }
 
     [Fact]
@@ -134,13 +134,13 @@ public class LobbyManagerStateMachineTests : IDisposable
     // ── Invite join, host absent (join fails → create) ────────────────────────
 
     [Fact]
-    public void JoinRoomByInvite_HostAbsent_RestoresHomeLobbyName()
+    public void JoinRoomByInvite_HostAbsent_PersistsPartyRoom()
     {
         _manager.JoinRoomByInvite("FRIEND-ROOM");
         _manager.HandleJoinRoomFailed(32758, "Room not found");
         _fake.CurrentRoomName = "FRIEND-ROOM";
         _manager.HandleCreatedRoom();
-        Assert.Equal("MY-ROOM", _manager.Config.LobbyRoomName);
+        Assert.Equal("FRIEND-ROOM", _manager.Config.LobbyRoomName);
     }
 
     [Fact]

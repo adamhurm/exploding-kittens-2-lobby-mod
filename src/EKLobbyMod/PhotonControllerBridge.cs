@@ -38,6 +38,7 @@ public sealed class PhotonControllerBridge : IPhotonBridge
     public void AllowKickPlayers(bool allow) => _controller.AllowKickPlayers(allow);
     public void KickPlayer(string userId) => _controller.KickPlayer(userId);
     public void SetLocalVersion(string version) => PhotonPropertyHelper.SetLocalVersion(version);
+    public void ClearPartyGameRoom() => PhotonPropertyHelper.ClearRoomGameProperty();
 
     public IReadOnlyList<PlayerInfo> GetRoomPlayers()
     {
