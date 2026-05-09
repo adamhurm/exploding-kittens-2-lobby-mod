@@ -55,11 +55,11 @@ static class SteamJoinPatch
         }
     }
 
-    static void Postfix(GameRichPresenceJoinRequested_t param)
+    static void Postfix(GameRichPresenceJoinRequested_t callback)
     {
         try
         {
-            var connect = param.m_rgchConnect;
+            var connect = callback.m_rgchConnect;
             Plugin.Log.LogInfo($"[SteamJoinPatch] Rich presence join ({connect?.Length ?? 0} chars)");
             if (string.IsNullOrEmpty(connect)) return;
             if (!LobbyManager.IsValidRoomName(connect))
