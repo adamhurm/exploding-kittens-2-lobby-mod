@@ -25,7 +25,7 @@ static class PartyGamePatch
             foreach (var m in controller.GetType().GetMethods(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
-                if (m.Name == "CreateRoom" && m.GetParameters().Length == 3)
+                if (m.Name == "CreateRoom" && m.GetParameters().Length == 3 && !m.IsAbstract)
                 { method = m; break; }
             }
         }
@@ -92,10 +92,10 @@ static class RoomPropertiesPatch
                 if (type == null) continue;
                 try
                 {
-                    var m = type.GetMethod("OnRoomPropertiesUpdated",
+                    var m = type.GetMethod("OnRoomPropertiesUpdate",
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
                         | BindingFlags.DeclaredOnly);
-                    if (m == null) continue;
+                    if (m == null || m.IsAbstract) continue;
                     var parms = m.GetParameters();
                     if (parms.Length == 1 && parms[0].ParameterType.Name.Contains("Hashtable"))
                     {
@@ -109,7 +109,7 @@ static class RoomPropertiesPatch
 
         if (candidates.Count == 0)
         {
-            Plugin.Log.LogWarning("[RoomPropertiesPatch] OnRoomPropertiesUpdated not found; party property updates unavailable");
+            Plugin.Log.LogWarning("[RoomPropertiesPatch] OnRoomPropertiesUpdate not found; party property updates unavailable");
             return;
         }
 
@@ -118,11 +118,11 @@ static class RoomPropertiesPatch
             try
             {
                 harmony.Patch(method, postfix: new HarmonyMethod(typeof(RoomPropertiesPatch), nameof(Postfix)));
-                Plugin.Log.LogInfo($"[RoomPropertiesPatch] Patched {method.DeclaringType?.Name}.OnRoomPropertiesUpdated");
+                Plugin.Log.LogInfo($"[RoomPropertiesPatch] Patched {method.DeclaringType?.Name}.OnRoomPropertiesUpdate");
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogWarning($"[RoomPropertiesPatch] Patch failed on {method.DeclaringType?.Name}: {ex.Message}");
+                Plugin.Log.LogWarning($"[RoomPropertiesPatch] Patch failed on {method.DeclaringType?.Name}.OnRoomPropertiesUpdate: {ex.Message}");
             }
         }
     }

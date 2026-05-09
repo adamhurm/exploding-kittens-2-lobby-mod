@@ -70,9 +70,7 @@ public static class PhotonPropertyHelper
         try
         {
             var props = player.CustomProperties;
-            if (props == null) return null;
-            // CustomProperties is an ExitGames.Client.Photon.Hashtable in the interop.
-            // The indexer returns object; cast via ToString().
+            if (props == null || !props.ContainsKey(VersionKey)) return null;
             var val = props[VersionKey];
             return val?.ToString();
         }
