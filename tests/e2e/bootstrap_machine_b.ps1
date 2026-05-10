@@ -19,7 +19,7 @@ Write-Host "=== Machine B bootstrap ==="
 
 # 1. Python deps
 Write-Host "Installing Python dependencies..."
-pip install mcp[cli] mss pyautogui psutil pywin32 Pillow
+pip install mcp mss pyautogui psutil pywin32 Pillow
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "pip install returned non-zero; continuing anyway"
 }
