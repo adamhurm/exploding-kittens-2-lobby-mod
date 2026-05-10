@@ -1,3 +1,4 @@
+import ctypes
 import json
 import os
 import re
@@ -54,9 +55,24 @@ def focus_game() -> str:
     if not found:
         return "Game window not found"
     hwnd = found[0]
+    title = win32gui.GetWindowText(hwnd)
     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-    win32gui.SetForegroundWindow(hwnd)
-    return f"Focused window: {win32gui.GetWindowText(hwnd)}"
+
+    # SetForegroundWindow is blocked from background processes unless we attach
+    # to the foreground thread first (Windows restriction).
+    u32 = ctypes.windll.user32
+    k32 = ctypes.windll.kernel32
+    fg_hwnd = u32.GetForegroundWindow()
+    fg_tid = u32.GetWindowThreadProcessId(fg_hwnd, None)
+    my_tid = k32.GetCurrentThreadId()
+    if fg_tid and fg_tid != my_tid:
+        u32.AttachThreadInput(my_tid, fg_tid, True)
+    u32.SetForegroundWindow(hwnd)
+    u32.BringWindowToTop(hwnd)
+    if fg_tid and fg_tid != my_tid:
+        u32.AttachThreadInput(my_tid, fg_tid, False)
+
+    return f"Focused window: {title}"
 
 
 @mcp.tool()
