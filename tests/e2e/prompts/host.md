@@ -1,10 +1,15 @@
-# Host (Machine A) — Steam Invite E2E Test
+# Host (Machine A) — Invite All E2E Test
 
-You are the HOST. Your job: launch the game, create a lobby, send a Steam
-invite to the joiner, and verify they appear in your lobby.
+You are the HOST. Your job: launch the game, create a lobby, click "INVITE ALL"
+in the mod overlay to invite the joiner, and verify they appear in your lobby.
 
 **Setup:** Set `$env:EK_COORDINATION_DIR` to the shared coordination directory
 before starting. Both machines must have read/write access.
+
+**Orientation:** At any point you can re-orient by taking a screenshot and
+reading the key buttons/text on screen. Each step has an expected landmark
+(listed in the step). If you see a landmark from a different step, treat that
+as your true current position and re-enter the flow from that step.
 
 ---
 
@@ -24,6 +29,8 @@ Call `launch_game`, then `wait_for_game(timeout=90)`, then `focus_game`.
 
 ## Step 3: Wait for title screen
 
+**Landmark:** dark-red background, "START GAME" button visible.
+
 Wait for the title screen:
 use `wait_for_pixel(x=100, y=400, r=80, g=40, b=40, tolerance=30, timeout=60)`
 to detect the dark-red title background.
@@ -31,6 +38,8 @@ to detect the dark-red title background.
 Save a screenshot as `host_01_title`.
 
 ## Step 4: Navigate to lobby
+
+**Landmarks (in order):** START GAME → PLAY → PLAY WITH FRIENDS → CREATE A GAME → mod overlay panel with lobby code.
 
 Click through the menus:
 - Click START GAME (see screenshot for coordinates)
@@ -47,15 +56,17 @@ Save a screenshot as `host_02_lobby`.
 
 ## Step 5: Verify lobby
 
+**Landmark:** mod overlay panel expanded, showing lobby code.
+
 You should see the overlay panel with a lobby code. Take a screenshot.
 Read the BepInEx logs with `read_logs(errors_only=true)` — should be clean.
 
-## Step 6: Send Steam invite
+## Step 6: Invite All
 
-Your Steam friend list should be visible in the friend picker. The joiner's
-Steam persona name is stored in the MCP server config as `steam_friend_name`.
-Look at the screenshot and find their name in the friend list. Click on their
-name to open the context menu, then click "Invite to Game".
+**Landmark:** "INVITE ALL" button in the mod overlay panel.
+
+The mod overlay panel is already expanded. Take a screenshot to confirm the
+"INVITE ALL" button is visible. Click it.
 
 Save a screenshot as `host_03_invite_sent`.
 
