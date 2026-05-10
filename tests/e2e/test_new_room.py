@@ -23,22 +23,22 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 from ek_test_server import click, close_game, focus_game, launch_game
-from ek_test_server import read_logs, screenshot, wait_for_game
+from ek_test_server import press_key, read_logs, screenshot, wait_for_game
 
 # ---------------------------------------------------------------------------
 # Click targets -- update if your game resolution differs from 1392x878.
 # ---------------------------------------------------------------------------
 CLICKS = {
     "start_game":        (390,  745),   # Title screen: "START GAME"
-    "play":              (240,  325),   # Main menu: "PLAY"
-    "play_with_friends": (870,  600),   # Game mode: "PLAY WITH FRIENDS"
-    "create_game":       (855,  410),   # Create or join: "CREATE A GAME"
+    "play":              (240,  330),   # Main menu: "PLAY"
+    "play_with_friends": (857,  635),   # Game mode: "PLAY WITH FRIENDS"
+    "create_game":       (855,  450),   # Create or join: "CREATE A GAME"
 }
 
-# A pixel sampled from the background when the expected screen is fully rendered.
-# Used by _wait_for_screen to avoid fixed sleeps.
+# Pixel coordinates used by _wait_for_screen to detect each screen.
 WAIT_PIXELS = {
     "START GAME": (100, 400),  # Title screen background (dark red); white during Unity splash
+    "MAIN MENU":  (240, 330),  # PLAY button (vivid red); dark during splash/overlay
 }
 
 # ---------------------------------------------------------------------------
@@ -61,18 +61,34 @@ def _pixel_is_dark_red(png: bytes, x: int, y: int) -> bool:
     return r > 80 and g < 60 and b < 60
 
 
+def _pixel_is_bright_red(png: bytes, x: int, y: int) -> bool:
+    """Return True if pixel (x, y) is a vivid red (e.g. the PLAY button on main menu)."""
+    img = Image.open(io.BytesIO(png))
+    r, g, b = img.getpixel((x, y))[:3]
+    return r > 160 and g < 80 and b < 80
+
+
+def _pixel_is_mostly_dark(png: bytes, x: int, y: int) -> bool:
+    """Return True if pixel (x, y) is near-black, indicating an overlay is active."""
+    img = Image.open(io.BytesIO(png))
+    r, g, b = img.getpixel((x, y))[:3]
+    return r < 30 and g < 30 and b < 30
+
+
 def _wait_for_screen(label: str, x: int, y: int, timeout: int = 60, check: str = "bright") -> bool:
-    """Poll until a pixel condition at (x, y) is met. check='bright' waits for
-    a white pixel; check='dark_red' waits for the dark-red title background.
+    """Poll until a pixel condition at (x, y) is met.
+    check: 'bright' (white), 'dark_red' (title bg), 'bright_red' (PLAY button).
     Returns False on timeout."""
     print(f"  Wait for {label} ...", end="  ", flush=True)
     deadline = time.time() + timeout
     while time.time() < deadline:
         png = screenshot().data
-        matched = (
-            _pixel_is_dark_red(png, x, y) if check == "dark_red"
-            else _pixel_is_bright(png, x, y)
-        )
+        if check == "dark_red":
+            matched = _pixel_is_dark_red(png, x, y)
+        elif check == "bright_red":
+            matched = _pixel_is_bright_red(png, x, y)
+        else:
+            matched = _pixel_is_bright(png, x, y)
         if matched:
             print("ready")
             return True
@@ -80,6 +96,16 @@ def _wait_for_screen(label: str, x: int, y: int, timeout: int = 60, check: str =
     print(f"timeout after {timeout}s")
     _failures.append(f'"{label}" did not appear within {timeout}s.')
     return False
+
+
+def _dismiss_overlay_if_present() -> None:
+    """If a Steam/Discord overlay is darkening the screen, press Escape to close it."""
+    png = screenshot().data
+    if _pixel_is_mostly_dark(png, 696, 440):
+        print("  (overlay detected -- pressing Escape)")
+        focus_game()
+        press_key("escape")
+        time.sleep(1)
 
 
 def _save_screenshot(tag: str) -> None:
@@ -92,6 +118,7 @@ def _save_screenshot(tag: str) -> None:
 def _focused_click(label: str, x: int, y: int) -> None:
     """Focus the game window then click — prevents focus loss between steps."""
     focus_game()
+    time.sleep(0.3)   # let the window fully accept foreground before clicking
     _step(label, click, x, y)
 
 
@@ -128,6 +155,13 @@ def run() -> None:
         _report()
         return
 
+    # The Steam overlay opens automatically when the game window gets focus for the
+    # first time (shows the Discord tab). Dismiss it with its toggle shortcut, then
+    # wait for the overlay to close before looking for the title screen pixel.
+    time.sleep(1)
+    _step("Dismiss Steam overlay", press_key, "shift+tab")
+    time.sleep(1.5)
+
     if not _wait_for_screen("START GAME", *WAIT_PIXELS["START GAME"], timeout=60, check="dark_red"):
         _step("Close game", close_game)
         _report()
@@ -135,26 +169,27 @@ def run() -> None:
     _save_screenshot("01_title")
 
     # 2. Title screen -> main menu
-    #    First click dismisses any overlay (Discord, etc.), second hits START GAME.
+    #    Marmalade Game Studio publisher splash plays between title and main menu
+    #    (no reliable pixel anchor — use a generous fixed sleep to clear it).
     _focused_click("Click START GAME (dismiss any overlay)", *CLICKS["start_game"])
     time.sleep(0.5)
     _focused_click("Click START GAME", *CLICKS["start_game"])
-    time.sleep(2)
+    time.sleep(8)
     _save_screenshot("02_main_menu")
 
     # 3. Main menu -> game mode
     _focused_click("Click PLAY", *CLICKS["play"])
-    time.sleep(1.5)
+    time.sleep(2.5)
     _save_screenshot("03_game_mode")
 
     # 4. Game mode -> create or join
     _focused_click("Click PLAY WITH FRIENDS", *CLICKS["play_with_friends"])
-    time.sleep(1.5)
+    time.sleep(2.5)
     _save_screenshot("04_create_or_join")
 
     # 5. Create game -> lobby
     _focused_click("Click CREATE A GAME", *CLICKS["create_game"])
-    time.sleep(3)
+    time.sleep(4)
     _save_screenshot("05_game_room")
 
     # 6. Assert: no BepInEx errors or warnings

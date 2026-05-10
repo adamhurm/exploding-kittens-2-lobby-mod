@@ -92,6 +92,16 @@ def click(x: int, y: int) -> str:
 
 
 @mcp.tool()
+def press_key(key: str) -> str:
+    """Press a key or key combination. Use '+' for combos, e.g. 'escape', 'shift+tab'."""
+    if "+" in key:
+        pyautogui.hotkey(*key.split("+"))
+    else:
+        pyautogui.press(key)
+    return f"Pressed: {key}"
+
+
+@mcp.tool()
 def type_text(text: str) -> str:
     """Send keystrokes for each character in text. For special chars use key names like 'enter'."""
     pyautogui.write(text, interval=0.05)
