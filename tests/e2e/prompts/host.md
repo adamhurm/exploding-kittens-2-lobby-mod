@@ -22,9 +22,9 @@ Get-Content "$dir\host.state"
 
 Call `launch_game`, then `wait_for_game(timeout=90)`, then `focus_game`.
 
-## Step 3: Wait for title screen and dismiss overlay
+## Step 3: Wait for title screen
 
-Press `shift+tab` to dismiss the Steam overlay. Wait for the title screen:
+Wait for the title screen:
 use `wait_for_pixel(x=100, y=400, r=80, g=40, b=40, tolerance=30, timeout=60)`
 to detect the dark-red title background.
 
@@ -52,16 +52,14 @@ Read the BepInEx logs with `read_logs(errors_only=true)` — should be clean.
 
 ## Step 6: Send Steam invite
 
-Press `shift+tab` to open the Steam overlay. Wait 2s for it to render.
+Your Steam friend list should be visible in the friend picker. The joiner's
+Steam persona name is stored in the MCP server config as `steam_friend_name`.
+Look at the screenshot and find their name in the friend list. Click on their
+name to open the context menu, then click "Invite to Game".
 
-Save a screenshot as `host_03_overlay_open`.
+Save a screenshot as `host_03_invite_sent`.
 
-Your Steam friend list should be visible. The joiner's Steam persona name is
-stored in the MCP server config as `steam_friend_name`. Look at the screenshot
-and find their name in the friend list. Click on their name to open the
-context menu, then click "Invite to Game".
-
-Wait 1s. Press `escape` to close the overlay. Wait 1s.
+Wait 1s.
 
 ## Step 7: Signal invite sent
 
@@ -108,7 +106,7 @@ Call `close_game`. Read `read_logs(errors_only=true)` one final time.
 If all steps completed without error:
 ```
 -- PASS -- Host completed successfully. Joiner joined lobby.
-Screenshots: host_01_title, host_02_lobby, host_03_overlay_open, host_04_joined
+Screenshots: host_01_title, host_02_lobby, host_03_invite_sent, host_04_joined
 ```
 
 If any step failed:

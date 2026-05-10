@@ -22,9 +22,9 @@ Get-Content "$dir\joiner.state"
 
 Call `launch_game`, then `wait_for_game(timeout=90)`, then `focus_game`.
 
-## Step 3: Wait for title screen and dismiss overlay
+## Step 3: Wait for title screen
 
-Press `shift+tab` to dismiss the Steam overlay. Wait for the title screen:
+Wait for the title screen:
 use `wait_for_pixel(x=100, y=400, r=80, g=40, b=40, tolerance=30, timeout=60)`.
 
 Save a screenshot as `joiner_01_title`.
@@ -54,17 +54,8 @@ Write-Host "Done waiting"
 
 ## Step 6: Accept the Steam invite
 
-The Steam overlay should show an invite popup. Look for it with a screenshot.
-The invite notification typically appears in the bottom-right corner of the
-screen. Use `wait_for_pixel` to detect a bright pixel from the invite UI,
-or take a screenshot and describe what you see.
-
-If the invite popup is visible, focus the game window with `focus_game`,
-then press `shift+tab` to open the overlay (if it closed). The invite should
-have an "Accept" button — click it.
-
-If the game has a "Join Game" button visible (sometimes the game shows its
-own prompt), click it instead.
+Take a screenshot and look for the in-game invite prompt. It may appear as a
+"Join Game" button or similar prompt. Click it to accept.
 
 Wait up to 10s for the game to transition to the lobby.
 

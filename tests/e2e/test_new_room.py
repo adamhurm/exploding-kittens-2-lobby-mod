@@ -155,13 +155,6 @@ def run() -> None:
         _report()
         return
 
-    # The Steam overlay opens automatically when the game window gets focus for the
-    # first time (shows the Discord tab). Dismiss it with its toggle shortcut, then
-    # wait for the overlay to close before looking for the title screen pixel.
-    time.sleep(1)
-    _step("Dismiss Steam overlay", press_key, "shift+tab")
-    time.sleep(1.5)
-
     if not _wait_for_screen("START GAME", *WAIT_PIXELS["START GAME"], timeout=60, check="dark_red"):
         _step("Close game", close_game)
         _report()
