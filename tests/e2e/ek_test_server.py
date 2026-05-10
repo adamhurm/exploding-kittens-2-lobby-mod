@@ -110,6 +110,32 @@ def type_text(text: str) -> str:
 
 
 @mcp.tool()
+def wait_for_pixel(x: int, y: int, r: int, g: int, b: int,
+                   tolerance: int = 10, timeout: int = 30) -> str:
+    """Poll pixel (x, y) until it matches (r, g, b) within tolerance.
+
+    Returns "matched after N.Ns" on success or "timeout after Ns" on failure.
+    Use this instead of repeated screenshot() calls when waiting for a known
+    UI element to appear (overlay open, invite popup, lobby transition).
+    """
+    import time as _time
+    start = _time.time()
+    deadline = start + timeout
+    with mss.mss() as sct:
+        while _time.time() < deadline:
+            raw = sct.grab(sct.monitors[1])
+            offset = (y * raw.width + x) * 3
+            if offset + 2 < len(raw.rgb):
+                pr, pg, pb = raw.rgb[offset], raw.rgb[offset + 1], raw.rgb[offset + 2]
+                if (abs(pr - r) <= tolerance and
+                    abs(pg - g) <= tolerance and
+                    abs(pb - b) <= tolerance):
+                    return f"matched after {_time.time() - start:.1f}s"
+            _time.sleep(0.3)
+    return f"timeout after {timeout}s"
+
+
+@mcp.tool()
 def close_game() -> str:
     """Terminate the game process."""
     killed: list[str] = []
