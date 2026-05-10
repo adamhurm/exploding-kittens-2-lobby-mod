@@ -17,6 +17,7 @@ _config_path = Path(__file__).parent / "ek_test_config.json"
 _config = json.loads(_config_path.read_text())
 GAME_DIR = Path(_config["game_dir"])
 STEAM_APP_ID = _config["steam_app_id"]
+STEAM_FRIEND_NAME = _config.get("steam_friend_name", "")
 _GAME_EXE = "ExplodingKittens"
 _GAME_WINDOW = "Exploding Kittens"
 
