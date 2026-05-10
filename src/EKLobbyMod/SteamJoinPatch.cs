@@ -9,6 +9,12 @@ namespace EKLobbyMod;
 // Patches the game's SteamManager._OnRichPresenceJoinRequested to intercept Steam
 // overlay join requests. Callback<GameRichPresenceJoinRequested_t>.Create() cannot
 // be used because the struct is non-blittable under IL2CppInterop.
+//
+// This is a PREFIX (not postfix) so we run BEFORE the game's handler. The game's
+// handler calls JoinMatch → JoinRoom via Photon; if we ran after it as a postfix,
+// our JoinRoomByInvite would issue a second JoinRoom, causing a double-join that
+// triggers OnJoinRoomFailed → CreateRoom (catastrophic). Returning false skips the
+// game's handler entirely, letting our join path own the operation.
 static class SteamJoinPatch
 {
     internal static void TryApply(Harmony harmony)
@@ -67,7 +73,7 @@ static class SteamJoinPatch
 
         try
         {
-            harmony.Patch(method, postfix: new HarmonyMethod(typeof(SteamJoinPatch), nameof(Postfix)));
+            harmony.Patch(method, prefix: new HarmonyMethod(typeof(SteamJoinPatch), nameof(Prefix)));
             Plugin.Log.LogInfo("[SteamJoinPatch] Patch applied successfully");
         }
         catch (Exception ex)
@@ -76,17 +82,19 @@ static class SteamJoinPatch
         }
     }
 
-    static void Postfix(GameRichPresenceJoinRequested_t callback)
+    // Returns false to skip the game's handler when we own this invite, preventing
+    // the game's JoinMatch from racing our JoinRoomByInvite on the same Photon room.
+    static bool Prefix(GameRichPresenceJoinRequested_t callback)
     {
         try
         {
             var connect = callback.m_rgchConnect;
             Plugin.Log.LogInfo($"[SteamJoinPatch] Rich presence join ({connect?.Length ?? 0} chars)");
-            if (string.IsNullOrEmpty(connect)) return;
+            if (string.IsNullOrEmpty(connect)) return true;
             if (!LobbyManager.IsValidRoomName(connect))
             {
-                Plugin.Log.LogWarning("[SteamJoinPatch] Connect string failed validation, ignoring");
-                return;
+                Plugin.Log.LogWarning("[SteamJoinPatch] Connect string not our format, deferring to game handler");
+                return true;
             }
             if (LobbyManager.Instance != null)
                 LobbyManager.Instance.JoinRoomByInvite(connect);
@@ -95,10 +103,12 @@ static class SteamJoinPatch
                 Plugin.Instance._pendingConnectArg = connect;
                 Plugin.Log.LogInfo("[SteamJoinPatch] LobbyManager not ready, stored as pending");
             }
+            return false; // skip game's JoinMatch — we own this join
         }
         catch (Exception ex)
         {
-            Plugin.Log.LogWarning($"[SteamJoinPatch] Postfix error: {ex.Message}");
+            Plugin.Log.LogWarning($"[SteamJoinPatch] Prefix error: {ex.Message}");
+            return true; // on error let game attempt its own handler
         }
     }
 }
