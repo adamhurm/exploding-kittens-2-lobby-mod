@@ -52,8 +52,14 @@ Three projects with a shared library:
 - **`FriendPickerPopup.cs`** — `MonoBehaviour` for the in-game Steam friend invite popup.
 - **`SteamInviter.cs`** — Steamworks rich-presence calls for Steam overlay invite flow.
 - **`DiscordInviteClient.cs`** — HTTP client that posts invite to a private Discord bot endpoint (auth required; not publicly documented).
-- **`PhotonClientFinder.cs`** / **`PhotonPropertyHelper.cs`** — Helpers for locating the Photon `IMultiplayerController` instance and reading/writing room custom properties.
+- **`PhotonClientFinder.cs`** — Harmony-patches `ExplodingKittensMultiplayer.InitNetworking` to capture the `IMultiplayerController` instance, initialize `LobbyManager`, and apply `PartyGamePatch`. This is the trigger for the entire plugin's initialization chain.
+- **`PhotonControllerBridge.cs`** — Wraps `IMultiplayerController` into the testable `IPhotonBridge` interface. Translates IL2CPP Photon event delegates into plain C# events.
+- **`IPhotonBridge.cs`** — The testability seam. `LobbyManager` depends only on this interface. `FakePhotonBridge` (in `tests/EKLobbyMod.Tests/`) is the test double; tests call `_manager.Handle*()` directly to simulate Photon callbacks without BepInEx or Unity.
+- **`PartyGamePatch.cs`** — Applied at runtime (in `PhotonClientFinder`) once the concrete controller type is known. Prefixes `IMultiplayerController.CreateRoom` to replace the room name with `{homeLobby}-g` (deterministic, so party members can derive the target room without an out-of-band message) and calls `LobbyManager.OnPartyGameStarting()` to broadcast it via a room property before the host leaves.
+- **`PhotonPropertyHelper.cs`** — Reads/writes Photon room and player custom properties, including `"ekmod_ver"` (peer mod version, key `LobbyManager.VersionPropertyKey`).
 - **`NullablePolyfill.cs`** — Polyfill attributes required because `<Nullable>disable</Nullable>` is forced in the `.csproj` (IL2CPP interop assemblies hide `NullableAttribute`).
+
+**`LobbyManager` events** (subscribed by `OverlayPanel`): `RejoinAvailable`, `RejoinConfirmed`, `PlayerListChanged`, `AutoQueueCancelled`, `GameStarted`, `VersionMapChanged`.
 
 Non-obvious runtime patterns in `LobbyManager.cs`:
 - **Steam invite join**: `JoinRoomByInvite()` temporarily overwrites `Config.LobbyRoomName` with the friend's room code, then restores the original after joining. This avoids permanently replacing the user's home lobby name.
@@ -61,7 +67,23 @@ Non-obvious runtime patterns in `LobbyManager.cs`:
 - **Room state machine**: Three orthogonal flags — `_inHomeLobby` (currently in our own private lobby room), `_inGame` (inside a matchmaking/game room), and `AutoQueueActive` (post-game countdown running). Only game-room leave events trigger the auto-queue countdown; home-lobby leave events are ignored.
 - **Photon abstraction**: All Photon calls go through the `IMultiplayerController` interface (from `MGS.Network`), not `PhotonNetwork` directly. `PhotonClientFinder` locates the concrete implementation at runtime by searching active `MonoBehaviour`s.
 
+**Room naming convention**: Home lobby names are `EK-{8-char uppercase hex}`, generated once by `ConfigStore.GetOrCreateRoomName()`. Game rooms created via `PartyGamePatch` are `{homeLobby}-g`. `LobbyManager.IsValidRoomName()` validates this format to distinguish mod-managed connect strings from native Steam rich-presence joins.
+
 `OverlayPanel.cs` builds the entire UI procedurally (no asset bundles, no UXML). All layout is code-driven with area-based responsive scaling: `_s = Mathf.Clamp(Mathf.Sqrt(Screen.width * Screen.height) / 1152f, 0.6f, 2.5f)`.
+
+### SteamInviter invite strategy
+
+`SteamInviter.InviteAll()` prefers `MGS.Platform.SteamPlatform.InviteFriend(string id, string extra)` over the raw `SteamFriends.InviteUserToGame()` fallback, because the game's own path sets up rich-presence correctly. The method is resolved once via reflection on first call (searching `MGS.Platform` assembly for a type with `InviteFriend(string,string)` and a static `Instance` property); the singleton and `MethodInfo` are cached. If the game's method throws, it falls back to `SteamFriends.InviteUserToGame` and stops retrying the cached method.
+
+`SteamInviter` is only safe to call while `SteamManager.Instance && SteamManager.Initialized` (the game's Steam singleton). It wraps the in-process Steamworks.NET loaded by `MGS.Platform.SteamManager` — not a separate Steam init.
+
+### EKLobbyTray internals
+
+`TrayApp` watches `%AppData%\EKLobbyMod\config.json` via `FileSystemWatcher` and rebuilds the context menu on changes. Windows fires the `Changed` event twice per save; a 500ms debounce suppresses the duplicate.
+
+`SteamUriInviter` (tray) is distinct from `SteamInviter` (plugin). Running outside the game process, it cannot call Steamworks directly — it opens `steam://` protocol URIs instead.
+
+`AutoLaunchHelper` manages a Windows registry key under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` to enable/disable start-with-Windows.
 
 ### Harmony patching
 
@@ -86,6 +108,28 @@ Non-obvious runtime patterns in `LobbyManager.cs`:
 The `libs/BepInEx/interop/` stubs are generated from `ExplodingKittens.exe` and committed. If the game updates, they must be regenerated by running BepInEx's IL2CPP dump tool against the new binary.
 
 `libs/BepInEx/core/` is populated automatically by `install.ps1` and `package.ps1` on first run if missing. No manual step required.
+
+## E2E tests
+
+`tests/e2e/` contains a Python E2E harness that drives the game via an MCP server.
+
+**Setup:**
+```powershell
+pip install -r tests/e2e/requirements.txt
+cp tests/e2e/ek_test_config.json.example tests/e2e/ek_test_config.json
+# Edit ek_test_config.json: set game_dir, steam_app_id, steam_friend_name
+```
+
+**Run:**
+```powershell
+python tests/e2e/test_new_room.py
+```
+
+`ek_test_server.py` is a `FastMCP` server exposing game control tools (`launch_game`, `wait_for_game`, `focus_game`, `click`, `screenshot`, `read_logs`, etc.). The AI agent prompts in `tests/e2e/prompts/` (`host.md`, `joiner.md`) are fed to Claude to drive two-machine scenarios.
+
+**Resolution dependency**: Click coordinates in `test_new_room.py` (`CLICKS` dict) assume 1392×878. Update them if running at a different resolution. Pixel-based screen detection uses `WAIT_PIXELS` coordinates for the same reason.
+
+`ek_test_config.json` is git-ignored (not committed). The `.example` file shows the required fields.
 
 ## CI/CD
 

@@ -80,6 +80,52 @@ static class SteamJoinPatch
         {
             Plugin.Log.LogWarning($"[SteamJoinPatch] Patch failed ({ex.GetType().Name}): {ex.Message}");
         }
+
+        TryApplyLobbyProbe(harmony);
+    }
+
+    // Probe: find _OnLobbyJoinRequested to determine if the game uses Steam Lobby callbacks.
+    // Pure logging postfix — never returns false, never interferes with the game.
+    private static void TryApplyLobbyProbe(Harmony harmony)
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type[] types;
+            try { types = asm.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = Array.FindAll(ex.Types!, t => t != null); }
+            catch { continue; }
+
+            foreach (var type in types)
+            {
+                if (type == null) continue;
+                try
+                {
+                    var m = type.GetMethod("_OnLobbyJoinRequested",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                        | BindingFlags.DeclaredOnly);
+                    if (m == null) continue;
+                    harmony.Patch(m, postfix: new HarmonyMethod(typeof(SteamJoinPatch), nameof(LobbyProbePostfix)));
+                    Plugin.Log.LogInfo($"[SteamJoinPatch] Lobby probe → {type.FullName}._OnLobbyJoinRequested");
+                    return;
+                }
+                catch { }
+            }
+        }
+        Plugin.Log.LogInfo("[SteamJoinPatch] _OnLobbyJoinRequested not found in any assembly");
+    }
+
+    static void LobbyProbePostfix(GameLobbyJoinRequested_t callback)
+    {
+        Plugin.Log.LogInfo($"[SteamJoinPatch] *** LOBBY JOIN REQUESTED fired — lobbyId={callback.m_steamIDLobby.m_SteamID} friend={callback.m_steamIDFriend.m_SteamID} ***");
+        if (!SteamManager.Instance || !SteamManager.Initialized) return;
+        int count = SteamMatchmaking.GetLobbyDataCount(callback.m_steamIDLobby);
+        Plugin.Log.LogInfo($"[SteamJoinPatch] Lobby data entries: {count}");
+        for (int i = 0; i < count; i++)
+        {
+            if (SteamMatchmaking.GetLobbyDataByIndex(callback.m_steamIDLobby, i,
+                out string key, 256, out string val, 256))
+                Plugin.Log.LogInfo($"[SteamJoinPatch]   lobby['{key}'] = '{val}'");
+        }
     }
 
     // Returns false to skip the game's handler when we own this invite, preventing

@@ -52,12 +52,14 @@ public static class SteamInviter
         if (!SteamManager.Instance || !SteamManager.Initialized) return;
         if (!_platformResolved) ResolvePlatformInvite();
 
+        Plugin.Log?.LogInfo($"[SteamInviter] InviteAll: connect='{connectString}' via {(_platformInviteMethod != null ? _platformInviteMethod.DeclaringType?.Name + ".InviteFriendImmediately" : "SteamFriends.InviteUserToGame")}");
         foreach (var idStr in steam64Ids)
         {
             if (_platformSingleton != null && _platformInviteMethod != null)
             {
                 try
                 {
+                    Plugin.Log?.LogInfo($"[SteamInviter] Platform invite → id={idStr} connect='{connectString}'");
                     _platformInviteMethod.Invoke(_platformSingleton, new object[] { idStr, connectString });
                     continue;
                 }
@@ -68,12 +70,16 @@ public static class SteamInviter
                 }
             }
             if (!ulong.TryParse(idStr, out var raw)) continue;
+            Plugin.Log?.LogInfo($"[SteamInviter] SteamFriends.InviteUserToGame → id={idStr} connect='{connectString}'");
             SteamFriends.InviteUserToGame(new CSteamID(raw), connectString);
         }
     }
 
-    // Searches the MGS.Platform assembly for a type with InviteFriendImmediately(string,string)
+    // Searches the MGS.Platform assembly for a type with InviteFriend(string,string)
     // and a static Instance property. Called once; result is cached in static fields.
+    // The actual method on MGS.Platforms.SteamPlatform is InviteFriend(id, extra),
+    // not InviteFriendImmediately — using the game's own method ensures the invite goes
+    // through the same path the game uses (lobby-based or rich-presence as appropriate).
     private static void ResolvePlatformInvite()
     {
         _platformResolved = true;
@@ -88,7 +94,7 @@ public static class SteamInviter
             foreach (var type in types)
             {
                 if (type == null) continue;
-                var m = type.GetMethod("InviteFriendImmediately",
+                var m = type.GetMethod("InviteFriend",
                     BindingFlags.Instance | BindingFlags.Public,
                     null, new[] { typeof(string), typeof(string) }, null);
                 if (m == null) continue;
@@ -101,7 +107,7 @@ public static class SteamInviter
                     if (inst == null) continue;
                     _platformSingleton = inst;
                     _platformInviteMethod = m;
-                    Plugin.Log?.LogInfo($"[SteamInviter] Platform invite resolved: {type.FullName}.InviteFriendImmediately");
+                    Plugin.Log?.LogInfo($"[SteamInviter] Platform invite resolved: {type.FullName}.InviteFriend");
                     return;
                 }
                 catch { continue; }
