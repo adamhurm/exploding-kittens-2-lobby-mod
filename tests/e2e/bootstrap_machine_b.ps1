@@ -1,3 +1,40 @@
+<#
+.SYNOPSIS
+    One-shot bootstrap for Machine B E2E test harness.
+
+.DESCRIPTION
+    Installs Python dependencies, copies the MCP server from the shared
+    network location, and writes machine-specific config and .mcp.json.
+
+.PREREQUISITES
+    Run these once before running this script:
+        winget install Git.Git Python.Python.3.14
+
+    After install, restart the terminal so python, pip, and git are on PATH.
+
+.PARAMETER GameDir
+    Full path to the Exploding Kittens 2 install directory on this machine.
+
+.PARAMETER SteamAppId
+    Steam App ID for Exploding Kittens 2 (e.g. 2999030).
+
+.PARAMETER FriendSteamName
+    The OTHER machine's Steam persona name (used to send/receive invites).
+
+.PARAMETER BootstrapShare
+    Network share where Machine A published ek_test_server.py.
+    Default: \\<network-share>\EKTest\ek_test_bootstrap
+
+.PARAMETER InstallDir
+    Where to create the ek-test-b workspace. Default: %LOCALAPPDATA%\ek-test-b
+
+.EXAMPLE
+    .\bootstrap_machine_b.ps1 `
+        -GameDir "D:\Steam\steamapps\common\Exploding Kittens 2" `
+        -SteamAppId 2999030 `
+        -FriendSteamName "HostSteamName"
+#>
+
 param(
     [Parameter(Mandatory = $true)]
     [string] $GameDir,
