@@ -4,7 +4,11 @@
 
 .DESCRIPTION
     Installs Python dependencies, copies the MCP server from the shared
-    network location, and writes machine-specific config and .mcp.json.
+    network location, writes machine-specific config, and creates a scheduled
+    task that runs the MCP server as an HTTP service at logon.
+
+    After bootstrap, Machine A's Claude Code session controls Machine B's game
+    via the HTTP MCP endpoint — no second Claude Code session needed.
 
 .PREREQUISITES
     Run these once before running this script:
@@ -28,6 +32,9 @@
 .PARAMETER InstallDir
     Where to create the ek-test-b workspace. Default: %LOCALAPPDATA%\ek-test-b
 
+.PARAMETER ServerPort
+    Port for the MCP HTTP server (default: 8080).
+
 .EXAMPLE
     .\bootstrap_machine_b.ps1 `
         -GameDir "D:\Steam\steamapps\common\Exploding Kittens 2" `
@@ -47,7 +54,9 @@ param(
 
     [string] $BootstrapShare = "\\<network-share>\EKTest\ek_test_bootstrap",
 
-    [string] $InstallDir = "$env:LOCALAPPDATA\ek-test-b"
+    [string] $InstallDir = "$env:LOCALAPPDATA\ek-test-b",
+
+    [int] $ServerPort = 8080
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,23 +90,45 @@ $config = @{
     game_dir          = $GameDir
     steam_app_id      = $SteamAppId
     steam_friend_name = $FriendSteamName
+    mcp_port          = $ServerPort
 } | ConvertTo-Json
 $config | Out-File -Encoding utf8 "$e2eDir\ek_test_config.json"
 Write-Host "Wrote ek_test_config.json"
 
-# 5. Write .mcp.json
-$mcpJson = @{
-    mcpServers = @{
-        "ek-test" = @{
-            command = "python"
-            args    = @("tests/e2e/ek_test_server.py")
-            cwd     = '${workspaceRoot}'
-        }
-    }
-} | ConvertTo-Json -Depth 3
-$mcpJson | Out-File -Encoding utf8 "$InstallDir\.mcp.json"
-Write-Host "Wrote .mcp.json"
+# 5. Create scheduled task to run MCP HTTP server at logon
+$pythonExe = (Get-Command python).Source
+$taskName = "EKTest-MCP-Server"
+$taskAction = New-ScheduledTaskAction -Execute $pythonExe `
+    -Argument "`"$e2eDir\ek_test_server.py`" --transport http --port $ServerPort" `
+    -WorkingDirectory $InstallDir
+$taskTrigger = New-ScheduledTaskTrigger -AtLogOn
+$taskPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
+$taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 0) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
+$task = Register-ScheduledTask -TaskName $taskName -Action $taskAction `
+    -Trigger $taskTrigger -Principal $taskPrincipal -Settings $taskSettings `
+    -Description "EK E2E Test MCP HTTP server for remote game control" `
+    -Force
+Write-Host "Created scheduled task: $taskName"
+
+# Start the task now
+Start-ScheduledTask -TaskName $taskName
+Write-Host "Started MCP server (port $ServerPort)"
+
+# 6. Print connection info
+$hostname = [System.Net.Dns]::GetHostName()
 Write-Host ""
-Write-Host "Bootstrap complete. Open Claude Code in: $InstallDir"
-Write-Host "Set env var before running tests: `$env:EK_COORDINATION_DIR = '<shared-path>\ek_test_coordination'"
+Write-Host "============================================================"
+Write-Host "  Machine B bootstrap complete."
+Write-Host ""
+Write-Host "  MCP HTTP server:  http://${hostname}:$ServerPort/mcp"
+Write-Host "  Scheduled task:   $taskName (runs at logon)"
+Write-Host ""
+Write-Host "  On Machine A, add this to .mcp.json:"
+Write-Host '  {'
+Write-Host '    "ek-test-b": {'
+Write-Host "      `"url`": `"http://${hostname}:$ServerPort/mcp`""
+Write-Host '    }'
+Write-Host '  }'
+Write-Host "============================================================"

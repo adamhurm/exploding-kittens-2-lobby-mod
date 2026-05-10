@@ -113,6 +113,8 @@ The `libs/BepInEx/interop/` stubs are generated from `ExplodingKittens.exe` and 
 
 `tests/e2e/` contains a Python E2E harness that drives the game via an MCP server.
 
+### Single-machine
+
 **Setup:**
 ```powershell
 pip install -r tests/e2e/requirements.txt
@@ -125,11 +127,49 @@ cp tests/e2e/ek_test_config.json.example tests/e2e/ek_test_config.json
 python tests/e2e/test_new_room.py
 ```
 
-`ek_test_server.py` is a `FastMCP` server exposing game control tools (`launch_game`, `wait_for_game`, `focus_game`, `click`, `screenshot`, `read_logs`, etc.). The AI agent prompts in `tests/e2e/prompts/` (`host.md`, `joiner.md`) are fed to Claude to drive two-machine scenarios.
+### Two-machine (single Claude session)
 
-**Resolution dependency**: Click coordinates in `test_new_room.py` (`CLICKS` dict) assume 1392×878. Update them if running at a different resolution. Pixel-based screen detection uses `WAIT_PIXELS` coordinates for the same reason.
+Machine B runs the MCP server as an HTTP service. A single Claude Code session
+on Machine A controls both machines' games via two MCP servers.
 
-`ek_test_config.json` is git-ignored (not committed). The `.example` file shows the required fields.
+**Machine B setup** (one-time):
+```powershell
+.\tests\e2e\bootstrap_machine_b.ps1 `
+    -GameDir "D:\Steam\steamapps\common\Exploding Kittens 2" `
+    -SteamAppId 2999030 `
+    -FriendSteamName "HostSteamName"
+```
+The bootstrap creates a Windows Scheduled Task that starts
+`ek_test_server.py --transport http --port 8080` at logon.
+
+**Machine A setup:**
+Edit `.mcp.json` — replace `<machine-b-hostname>` with Machine B's actual
+hostname or IP. Enable the server in `.claude/settings.local.json` by adding
+`"ek-test-b"` to `enabledMcpjsonServers`, or enable it at runtime via `/mcp`.
+
+**Run the two-machine test:**
+Give Claude the prompt in `tests/e2e/prompts/unified.md`. A single session
+controls both machines via `mcp__ek-test__*` (host) and `mcp__ek-test-b__*`
+(joiner) — no file-based coordination needed.
+
+The older `host.md` / `joiner.md` prompts are still available for two-session
+manual coordination.
+
+`ek_test_server.py` is a `FastMCP` server exposing 10 game control tools
+(`launch_game`, `wait_for_game`, `focus_game`, `click`, `screenshot`,
+`read_logs`, etc.). It supports two transports:
+
+```
+python tests/e2e/ek_test_server.py                           # stdio (default)
+python tests/e2e/ek_test_server.py --transport http --port 8080  # HTTP (remote)
+```
+
+**Resolution dependency**: Click coordinates in `test_new_room.py` (`CLICKS`
+dict) assume 1392×878. Update them if running at a different resolution.
+Pixel-based screen detection uses `WAIT_PIXELS` coordinates for the same reason.
+
+`ek_test_config.json` is git-ignored (not committed). The `.example` file shows
+the required fields including optional `mcp_port` for HTTP mode.
 
 ## CI/CD
 

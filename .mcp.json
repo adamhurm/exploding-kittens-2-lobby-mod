@@ -4,6 +4,9 @@
       "command": "python",
       "args": ["tests/e2e/ek_test_server.py"],
       "cwd": "${workspaceRoot}"
+    },
+    "ek-test-b": {
+      "url": "http://<machine-b-hostname>:8080/mcp"
     }
   }
 }
