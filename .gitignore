@@ -13,3 +13,4 @@ docs/superpowers/specs/2026-05-08-invite-discovery-design.md
 docs/superpowers/plans/2026-05-08-invite-discovery.md
 .claude/
 tests/e2e/ek_test_config.json
+tests/e2e/screenshot_*.png
