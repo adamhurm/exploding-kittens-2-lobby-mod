@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ek-test": {
+      "command": "python",
+      "args": ["tests/e2e/ek_test_server.py"],
+      "cwd": "${workspaceRoot}"
+    }
+  }
+}
