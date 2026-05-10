@@ -14,9 +14,12 @@ Usage:
 Coordinates assume 1392x878 fullscreen resolution. Update CLICKS below if
 your game runs at a different resolution.
 """
+import io
 import sys
 import time
 from pathlib import Path
+
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 from ek_test_server import click, close_game, focus_game, launch_game
@@ -32,10 +35,39 @@ CLICKS = {
     "create_game":       (855,  410),   # Create or join: "CREATE A GAME"
 }
 
+# A pixel that is white when the expected screen is fully rendered.
+# Used by _wait_for_screen to avoid fixed sleeps.
+WAIT_PIXELS = {
+    "START GAME":    (390, 745),   # White text on dark-red title screen
+}
+
 # ---------------------------------------------------------------------------
 
 _failures: list[str] = []
 _screenshot_dir = Path(__file__).parent
+
+
+def _pixel_is_bright(png: bytes, x: int, y: int, threshold: int = 200) -> bool:
+    """Return True if pixel (x, y) has all RGB channels above threshold."""
+    img = Image.open(io.BytesIO(png))
+    r, g, b = img.getpixel((x, y))[:3]
+    return r > threshold and g > threshold and b > threshold
+
+
+def _wait_for_screen(label: str, x: int, y: int, timeout: int = 60) -> bool:
+    """Poll until a bright (white) pixel appears at (x, y), indicating the
+    expected screen is fully rendered. Returns False on timeout."""
+    print(f"  Wait for {label} ...", end="  ", flush=True)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        png = screenshot().data
+        if _pixel_is_bright(png, x, y):
+            print("ready")
+            return True
+        time.sleep(1)
+    print(f"timeout after {timeout}s")
+    _failures.append(f'"{label}" did not appear within {timeout}s.')
+    return False
 
 
 def _save_screenshot(tag: str) -> None:
@@ -78,7 +110,10 @@ def run() -> None:
         _report()
         return
 
-    time.sleep(4)
+    if not _wait_for_screen("START GAME", *WAIT_PIXELS["START GAME"], timeout=60):
+        _step("Close game", close_game)
+        _report()
+        return
     _save_screenshot("01_title")
 
     # 2. Title screen -> main menu
