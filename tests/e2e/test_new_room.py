@@ -35,10 +35,10 @@ CLICKS = {
     "create_game":       (855,  410),   # Create or join: "CREATE A GAME"
 }
 
-# A pixel that is white when the expected screen is fully rendered.
+# A pixel sampled from the background when the expected screen is fully rendered.
 # Used by _wait_for_screen to avoid fixed sleeps.
 WAIT_PIXELS = {
-    "START GAME":    (390, 745),   # White text on dark-red title screen
+    "START GAME": (100, 400),  # Title screen background (dark red); white during Unity splash
 }
 
 # ---------------------------------------------------------------------------
@@ -54,14 +54,26 @@ def _pixel_is_bright(png: bytes, x: int, y: int, threshold: int = 200) -> bool:
     return r > threshold and g > threshold and b > threshold
 
 
-def _wait_for_screen(label: str, x: int, y: int, timeout: int = 60) -> bool:
-    """Poll until a bright (white) pixel appears at (x, y), indicating the
-    expected screen is fully rendered. Returns False on timeout."""
+def _pixel_is_dark_red(png: bytes, x: int, y: int) -> bool:
+    """Return True if pixel (x, y) matches the dark-red title screen background."""
+    img = Image.open(io.BytesIO(png))
+    r, g, b = img.getpixel((x, y))[:3]
+    return r > 80 and g < 60 and b < 60
+
+
+def _wait_for_screen(label: str, x: int, y: int, timeout: int = 60, check: str = "bright") -> bool:
+    """Poll until a pixel condition at (x, y) is met. check='bright' waits for
+    a white pixel; check='dark_red' waits for the dark-red title background.
+    Returns False on timeout."""
     print(f"  Wait for {label} ...", end="  ", flush=True)
     deadline = time.time() + timeout
     while time.time() < deadline:
         png = screenshot().data
-        if _pixel_is_bright(png, x, y):
+        matched = (
+            _pixel_is_dark_red(png, x, y) if check == "dark_red"
+            else _pixel_is_bright(png, x, y)
+        )
+        if matched:
             print("ready")
             return True
         time.sleep(1)
@@ -75,6 +87,12 @@ def _save_screenshot(tag: str) -> None:
     path = _screenshot_dir / f"screenshot_{tag}.png"
     path.write_bytes(img.data)
     print(f"       screenshot -> {path.name}")
+
+
+def _focused_click(label: str, x: int, y: int) -> None:
+    """Focus the game window then click — prevents focus loss between steps."""
+    focus_game()
+    _step(label, click, x, y)
 
 
 def _step(label: str, fn, *args, **kwargs) -> object:
@@ -110,7 +128,7 @@ def run() -> None:
         _report()
         return
 
-    if not _wait_for_screen("START GAME", *WAIT_PIXELS["START GAME"], timeout=60):
+    if not _wait_for_screen("START GAME", *WAIT_PIXELS["START GAME"], timeout=60, check="dark_red"):
         _step("Close game", close_game)
         _report()
         return
@@ -118,24 +136,24 @@ def run() -> None:
 
     # 2. Title screen -> main menu
     #    First click dismisses any overlay (Discord, etc.), second hits START GAME.
-    _step("Click START GAME (dismiss any overlay)", click, *CLICKS["start_game"])
+    _focused_click("Click START GAME (dismiss any overlay)", *CLICKS["start_game"])
     time.sleep(0.5)
-    _step("Click START GAME", click, *CLICKS["start_game"])
+    _focused_click("Click START GAME", *CLICKS["start_game"])
     time.sleep(2)
     _save_screenshot("02_main_menu")
 
     # 3. Main menu -> game mode
-    _step("Click PLAY", click, *CLICKS["play"])
+    _focused_click("Click PLAY", *CLICKS["play"])
     time.sleep(1.5)
     _save_screenshot("03_game_mode")
 
     # 4. Game mode -> create or join
-    _step("Click PLAY WITH FRIENDS", click, *CLICKS["play_with_friends"])
+    _focused_click("Click PLAY WITH FRIENDS", *CLICKS["play_with_friends"])
     time.sleep(1.5)
     _save_screenshot("04_create_or_join")
 
     # 5. Create game -> lobby
-    _step("Click CREATE A GAME", click, *CLICKS["create_game"])
+    _focused_click("Click CREATE A GAME", *CLICKS["create_game"])
     time.sleep(3)
     _save_screenshot("05_game_room")
 
